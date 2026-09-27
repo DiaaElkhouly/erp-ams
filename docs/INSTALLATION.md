@@ -45,9 +45,12 @@ Edit `.env`:
 
 ```env
 DATABASE_URL="postgresql://ims_user:ims_password@localhost:5432/ims_db?schema=public"
+DATABASE_URL_UNPOOLED="postgresql://ims_user:ims_password@localhost:5432/ims_db?schema=public"
 AUTH_SECRET="<generate one — see below>"
 NEXTAUTH_URL="http://localhost:3000"
 ```
+
+`DATABASE_URL` is used by the application and can use a pooled connection. `DATABASE_URL_UNPOOLED` is used by Prisma migrations and must use a direct, non-pooled PostgreSQL connection. For local development, both can point to the same database.
 
 Generate a secure `AUTH_SECRET`:
 ```bash
@@ -89,10 +92,22 @@ Open http://localhost:3000. Sign in as the quality manager with `quality@ims.loc
 | `npm run db:push` | Push schema changes without creating a migration (prototyping) |
 | `npm run db:reset` | Drop and recreate the database, then reseed |
 
+## Deploy to Vercel
+
+Use a hosted PostgreSQL database such as Neon. In Vercel, add these environment variables for each environment you deploy:
+
+- `DATABASE_URL`: pooled PostgreSQL connection string
+- `DATABASE_URL_UNPOOLED`: direct (non-pooled) PostgreSQL connection string (Neon's unpooled URL)
+- `AUTH_SECRET`: a long random secret
+- `NEXTAUTH_URL`: your deployed site's URL, for example `https://your-app.vercel.app`
+
+Vercel runs the `vercel-build` script, which applies committed Prisma migrations with `prisma migrate deploy` before `next build`. Keep `DATABASE_URL_UNPOOLED` pointed at the database for that Vercel environment; use a separate database for Preview deployments so they do not apply migrations to Production. `npm run postinstall` generates Prisma Client during Vercel's dependency installation.
+
 ## Troubleshooting
 
 - **`ERESOLVE unable to resolve dependency tree` on `npm install`** — some packages (e.g. older `recharts`/`framer-motion` releases) declare peer-dependency ranges that lag behind React 19 even though they work fine with it. This project ships an `.npmrc` with `legacy-peer-deps=true` so plain `npm install` should just work. If you still hit this (e.g. a global npm config overrides it), run `npm install --legacy-peer-deps` explicitly.
 - **`Can't reach database server`** — confirm PostgreSQL is running and `DATABASE_URL` matches your credentials/port.
 - **`Environment variable not found: DATABASE_URL`** — make sure you copied `.env.example` to `.env` (not `.env.local`) and restarted the dev server.
+- **`Environment variable not found: DATABASE_URL_UNPOOLED`** — set it in `.env` and in Vercel's project settings; it must be a direct database URL.
 - **Prisma Client out of date after schema edits** — run `npx prisma generate` (or re-run `npm install`).
 - **Port 3000 already in use** — `PORT=3001 npm run dev`.
