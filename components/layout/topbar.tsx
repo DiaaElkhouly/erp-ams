@@ -13,6 +13,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { CommandPalette } from "./command-palette";
+import { MobileNav } from "./mobile-nav";
 import { useI18n } from "@/lib/i18n";
 import type { Role } from "@prisma/client";
 
@@ -41,13 +42,14 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between gap-4 border-b bg-card px-4">
-      <div className="flex items-center gap-3 text-sm text-muted-foreground">
-        <span>{t.home}</span>
+    <header className="flex h-14 items-center justify-between gap-2 border-b bg-card px-3 sm:gap-4 sm:px-4">
+      <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground sm:gap-3">
+        <MobileNav role={role} />
+        <span className="hidden shrink-0 sm:inline">{t.home}</span>
         {crumb.map((c, i) => (
-          <span key={i} className="flex items-center gap-3">
-            <span>/</span>
-            <span className="capitalize text-foreground">{crumbLabels[c] ?? c.replace(/-/g, " ")}</span>
+          <span key={i} className="flex min-w-0 items-center gap-2 sm:gap-3">
+            {i > 0 && <span className="shrink-0">/</span>}
+            <span className="truncate capitalize text-foreground">{crumbLabels[c] ?? c.replace(/-/g, " ")}</span>
           </span>
         ))}
       </div>
@@ -67,12 +69,12 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
         <Button
           variant="outline"
           size="sm"
-          className="gap-2"
+          className="gap-2 px-2 sm:px-3"
           onClick={() => setLocale(locale === "en" ? "ar" : "en")}
           aria-label={t.language}
         >
           <Languages className="h-3.5 w-3.5" />
-          {locale === "en" ? "عربي" : "EN"}
+          <span className="hidden sm:inline">{locale === "en" ? "عربي" : "EN"}</span>
         </Button>
 
         <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
