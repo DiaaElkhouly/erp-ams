@@ -1,4 +1,4 @@
-import { PrismaClient, Role, ItemType, Prisma } from "@prisma/client";
+import { PrismaClient, Role, ItemType, Prisma, SalesOrderStatus, PurchaseOrderStatus, WorkOrderStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 const db = new PrismaClient();
@@ -303,10 +303,358 @@ async function main() {
     await db.labMixDesign.upsert({ where: { id: design.id }, update: {}, create: design });
   }
 
+  await seedHistory(admin.id, {
+    factoryYardId: factoryYard.id,
+    bomsBySku: factoryBomBySku,
+    itemsBySku: Object.fromEntries(
+      Object.entries(factoryItems).map(([sku, item]) => [sku, item.id]),
+    ),
+  });
+
   console.log("Seed complete.");
   console.log("Demo password: Admin123! (admin@ims.local, production@ims.local, warehouse@ims.local, purchasing@ims.local, sales@ims.local, quality@ims.local)");
   console.log("Factory demo: block, cement brick, interlock, ready-mix concrete, lab test results, mix designs, and work orders.");
+  console.log("History demo: ~14 months of sales orders, purchase orders, work orders and lab tests for the dashboard date filter.");
 }
+
+// ---------------------------------------------------------------------------
+// DASHBOARD HISTORY
+// ---------------------------------------------------------------------------
+
+/** Deterministic PRNG (mulberry32) so re-running the seed yields the same history. */
+function makeRandom(seed: number) {
+  let state = seed;
+  return function random() {
+    state |= 0;
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const HISTORY_DAYS = 425; // ~14 months
+const HISTORY_CUSTOMERS: [string, number][] = [
+  ["شركة النيل للمقاولات", 26],
+  ["مؤسسة الدلتا للإنشاءات", 20],
+  ["مجموعة القاهرة للإنشاءات", 16],
+  ["شركة الفيوم للأسمنت", 13],
+  ["شركة الصفوة للمقاولات", 12],
+  ["مجموعة العمارة الحديثة", 13],
+];
+const HISTORY_SUPPLIERS: [string, number][] = [
+  ["شركة السويس للأسمنت والتجارة", 34],
+  ["مورد الحصى والمكعبات", 26],
+  ["شركة النيل لمواد البناء", 22],
+  ["مصنع الأمل للمواد الكيميائية", 18],
+];
+
+// sku, typical order quantity range, price jitter
+const SALES_SKUS: [string, [number, number], number][] = [
+  ["FG-BLOCK-20", [600, 3200], 0.12],
+  ["FG-BRICK-10", [900, 5000], 0.1],
+  ["FG-PAVER-06", [1200, 7000], 0.14],
+  ["FG-RMC-C25", [6, 32], 0.08],
+];
+
+const PURCHASE_SKUS: [string, [number, number], number][] = [
+  ["RM-CEM-425", [12, 40], 0.08],
+  ["RM-SAND-01", [25, 70], 0.09],
+  ["RM-AGG-01", [20, 55], 0.09],
+  ["RM-AGG-HALF", [15, 45], 0.09],
+  ["RM-STONE-DUST", [8, 26], 0.1],
+  ["RM-ADMIX-01", [250, 900], 0.07],
+  ["RM-OXIDE-RED", [100, 320], 0.1],
+];
+
+type HistoryContext = {
+  factoryYardId: string;
+  bomsBySku: Record<string, { id: string }>;
+  itemsBySku: Record<string, string>;
+};
+
+function jitteredPrice(base: number, spread: number, random: () => number) {
+  const factor = 1 + (random() * 2 - 1) * spread;
+  return Math.round(base * factor * 100) / 100;
+}
+
+function randomDateWithin(day: Date, random: () => number) {
+  const hour = 7 + Math.floor(random() * 11);
+  const minute = Math.floor(random() * 60);
+  const result = new Date(day);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
+function pick<T>(list: readonly T[], random: () => number): T {
+  return list[Math.floor(random() * list.length)];
+}
+
+function weightedPick<T>(entries: [T, number][], random: () => number): T {
+  const total = entries.reduce((sum, entry) => sum + entry[1], 0);
+  let roll = random() * total;
+  for (const entry of entries) {
+    roll -= entry[1];
+    if (roll <= 0) return entry[0];
+  }
+  return entries[entries.length - 1][0];
+}
+
+async function ensureNamed(
+  names: string[],
+  findMany: () => Promise<{ id: string; name: string }[]>,
+  create: (name: string) => Promise<{ id: string; name: string }>,
+) {
+  const existing = await findMany();
+  const byName = new Map(existing.map((row) => [row.name, row]));
+  const result = [...existing];
+
+  for (const name of names) {
+    if (byName.has(name)) continue;
+    const created = await create(name);
+    byName.set(name, created);
+    result.push(created);
+  }
+  return result;
+}
+
+/**
+ * Generates ~14 months of sales orders, purchase orders, work orders and lab records
+ * spread across real dates so the dashboard's date-range filter has something to show.
+ * Rows are inserted with explicit deterministic ids via createMany + skipDuplicates,
+ * so running the seed repeatedly never duplicates or overwrites existing data.
+ */
+async function seedHistory(adminId: string, ctx: HistoryContext) {
+  const random = makeRandom(20260215);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(start.getDate() - HISTORY_DAYS);
+
+  const items = await db.item.findMany({
+    select: { id: true, sku: true, costPrice: true, salePrice: true, reorderPoint: true },
+  });
+  const itemBySku = new Map(items.map((item) => [item.sku, item]));
+  const factoryBoms = await db.bom.findMany({ select: { id: true, finishedSku: true } });
+  const bomBySku = new Map(factoryBoms.map((bom) => [bom.finishedSku, bom.id]));
+  const warehouses = await db.warehouse.findMany({ select: { id: true, code: true } });
+  const yardId = warehouses.find((w) => w.code === "WH-EGYPT-YARD")?.id ?? ctx.factoryYardId;
+
+  const customers = await ensureNamed(
+    HISTORY_CUSTOMERS.map(([name]) => name),
+    () => db.customer.findMany({ select: { id: true, name: true } }),
+    (name) => db.customer.create({ data: { name } }),
+  );
+  const suppliers = await ensureNamed(
+    HISTORY_SUPPLIERS.map(([name]) => name),
+    () => db.supplier.findMany({ select: { id: true, name: true } }),
+    (name) => db.supplier.create({ data: { name } }),
+  );
+
+  type SalesOrderRow = Prisma.SalesOrderUncheckedCreateInput & { id: string };
+  type SalesLineRow = Prisma.SalesOrderLineUncheckedCreateInput;
+  type PurchaseOrderRow = Prisma.PurchaseOrderUncheckedCreateInput & { id: string };
+  type PurchaseLineRow = Prisma.PurchaseOrderLineUncheckedCreateInput;
+  type WorkOrderRow = Prisma.WorkOrderUncheckedCreateInput & { id: string };
+  type LabRow = Prisma.LabTestRecordUncheckedCreateInput & { id: string };
+
+  const salesOrders: SalesOrderRow[] = [];
+  const salesLines: SalesLineRow[] = [];
+  const purchaseOrders: PurchaseOrderRow[] = [];
+  const purchaseLines: PurchaseLineRow[] = [];
+  const workOrders: WorkOrderRow[] = [];
+  const labRows: LabRow[] = [];
+
+  let soIndex = 0;
+  let poIndex = 0;
+  let woIndex = 0;
+  let labIndex = 0;
+
+  for (let dayOffset = 0; dayOffset <= HISTORY_DAYS; dayOffset += 1) {
+    const day = new Date(start);
+    day.setDate(start.getDate() + dayOffset);
+    const daysAgo = HISTORY_DAYS - dayOffset;
+
+    // --- sales orders: ~55% of days, 1-4 lines each -------------------------
+    if (random() < 0.55) {
+      const orderCount = random() < 0.35 ? 2 : 1;
+      for (let n = 0; n < orderCount; n += 1) {
+        soIndex += 1;
+        const id = `hist-so-${String(soIndex).padStart(5, "0")}`;
+        const customer = weightedPick(HISTORY_CUSTOMERS, random);
+        const customerRow = customers.find((row) => row.name === customer);
+        if (!customerRow) continue;
+
+        const lineCount = 1 + Math.floor(random() * 4);
+        const chosen = new Set<string>();
+        let status: SalesOrderStatus;
+        if (daysAgo <= 4) status = random() < 0.45 ? "DRAFT" : "CONFIRMED";
+        else if (daysAgo <= 12) status = random() < 0.6 ? "CONFIRMED" : "FULFILLED";
+        else status = "FULFILLED";
+        if (random() < 0.035) status = "CANCELLED";
+
+        for (let line = 0; line < lineCount; line += 1) {
+          const [sku, qtyRange, spread] = pick(SALES_SKUS, random);
+          if (chosen.has(sku)) continue;
+          chosen.add(sku);
+          const item = itemBySku.get(sku);
+          if (!item) continue;
+          const quantity = Math.round(qtyRange[0] + random() * (qtyRange[1] - qtyRange[0]));
+          salesLines.push({
+            id: `${id}-l${line + 1}`,
+            salesOrderId: id,
+            itemId: item.id,
+            quantity,
+            unitPrice: jitteredPrice(Number(item.salePrice), spread, random),
+          });
+        }
+
+        salesOrders.push({
+          id,
+          orderNumber: `SO-H-${String(soIndex).padStart(5, "0")}`,
+          customerId: customerRow.id,
+          createdById: adminId,
+          status,
+          orderDate: randomDateWithin(day, random),
+        });
+      }
+    }
+
+    // --- purchase orders: ~28% of days, 1-3 lines each -----------------------
+    if (random() < 0.28) {
+      poIndex += 1;
+      const id = `hist-po-${String(poIndex).padStart(5, "0")}`;
+      const supplier = weightedPick(HISTORY_SUPPLIERS, random);
+      const supplierRow = suppliers.find((row) => row.name === supplier);
+      if (supplierRow) {
+        const lineCount = 1 + Math.floor(random() * 3);
+        const chosen = new Set<string>();
+        let status: PurchaseOrderStatus;
+        if (daysAgo <= 5) status = random() < 0.5 ? "DRAFT" : "ORDERED";
+        else if (daysAgo <= 15) status = random() < 0.5 ? "ORDERED" : "RECEIVED";
+        else status = "RECEIVED";
+        if (random() < 0.03) status = "CANCELLED";
+
+        for (let line = 0; line < lineCount; line += 1) {
+          const [sku, qtyRange, spread] = pick(PURCHASE_SKUS, random);
+          if (chosen.has(sku)) continue;
+          chosen.add(sku);
+          const item = itemBySku.get(sku);
+          if (!item) continue;
+          const quantity = Math.round(qtyRange[0] + random() * (qtyRange[1] - qtyRange[0]));
+          purchaseLines.push({
+            id: `${id}-l${line + 1}`,
+            purchaseOrderId: id,
+            itemId: item.id,
+            quantity,
+            unitCost: jitteredPrice(Number(item.costPrice), spread, random),
+          });
+        }
+
+        purchaseOrders.push({
+          id,
+          orderNumber: `PO-H-${String(poIndex).padStart(5, "0")}`,
+          supplierId: supplierRow.id,
+          createdById: adminId,
+          status,
+          orderDate: randomDateWithin(day, random),
+        });
+      }
+    }
+
+    // --- work orders: every other day ---------------------------------------
+    if (dayOffset % 2 === 0 && random() < 0.75) {
+      woIndex += 1;
+      const [sku, qtyRange] = pick(SALES_SKUS, random);
+      const item = itemBySku.get(sku);
+      const bomId = bomBySku.get(sku) ?? ctx.bomsBySku[sku]?.id;
+      if (!item || !bomId) continue;
+
+      const quantity = Math.max(1, Math.round((qtyRange[0] + random() * (qtyRange[1] - qtyRange[0])) / 6));
+      const startDate = randomDateWithin(day, random);
+      const dueDate = new Date(startDate);
+      dueDate.setDate(dueDate.getDate() + 5 + Math.floor(random() * 9));
+
+      let status: WorkOrderStatus;
+      let completedAt: Date | null = null;
+      if (daysAgo <= 3) status = "IN_PROGRESS";
+      else if (daysAgo <= 8) status = random() < 0.5 ? "RELEASED" : "IN_PROGRESS";
+      else {
+        status = "COMPLETED";
+        completedAt = new Date(startDate);
+        completedAt.setDate(completedAt.getDate() + 3 + Math.floor(random() * 5));
+      }
+
+      workOrders.push({
+        id: `hist-wo-${String(woIndex).padStart(5, "0")}`,
+        orderNumber: `WO-H-${String(woIndex).padStart(5, "0")}`,
+        bomId,
+        itemId: item.id,
+        warehouseId: yardId,
+        quantity,
+        status,
+        startDate,
+        dueDate,
+        completedAt,
+        createdById: adminId,
+      });
+    }
+
+    // --- lab tests: roughly three per week ----------------------------------
+    if (dayOffset % 2 === 1 && random() < 0.8) {
+      for (let n = 0; n < 1 + Math.floor(random() * 2); n += 1) {
+        labIndex += 1;
+        const spec = pick(LAB_TEMPLATES, random);
+        const roll = random();
+        const status = roll < spec.passRate ? "PASS" : roll < spec.passRate + (1 - spec.passRate) * 0.6 ? "REVIEW" : "FAIL";
+        labRows.push({
+          id: `hist-lab-${String(labIndex).padStart(5, "0")}`,
+          category: spec.category,
+          material: spec.material,
+          testName: spec.testName,
+          result: Math.round((spec.min + random() * (spec.max - spec.min)) * 1000) / 1000,
+          unit: spec.unit,
+          standard: spec.standard,
+          minValue: spec.minValue ?? null,
+          maxValue: spec.maxValue ?? null,
+          status,
+          testedAt: randomDateWithin(day, random),
+        });
+      }
+    }
+  }
+
+  await db.salesOrder.createMany({ data: salesOrders, skipDuplicates: true });
+  await db.salesOrderLine.createMany({ data: salesLines, skipDuplicates: true });
+  await db.purchaseOrder.createMany({ data: purchaseOrders, skipDuplicates: true });
+  await db.purchaseOrderLine.createMany({ data: purchaseLines, skipDuplicates: true });
+  await db.workOrder.createMany({ data: workOrders, skipDuplicates: true });
+  await db.labTestRecord.createMany({ data: labRows, skipDuplicates: true });
+
+  console.log(
+    `History: ${salesOrders.length} sales orders / ${salesLines.length} lines, ` +
+    `${purchaseOrders.length} purchase orders / ${purchaseLines.length} lines, ` +
+    `${workOrders.length} work orders, ${labRows.length} lab records.`,
+  );
+}
+
+const LAB_TEMPLATES: {
+  category: string; material: string; testName: string; unit: string; standard: string;
+  min: number; max: number; minValue?: number | null; maxValue?: number | null; passRate: number;
+}[] = [
+  { category: "cement", material: "الأسمنت", testName: "زمن الشك الابتدائي", unit: "min", standard: "ASTM C191", min: 110, max: 220, minValue: 45, maxValue: 375, passRate: 0.94 },
+  { category: "cement", material: "الأسمنت", testName: "مقاومة الضغط · 28 يوماً", unit: "MPa", standard: "ASTM C109", min: 43, max: 52, minValue: 42.5, passRate: 0.96 },
+  { category: "aggregate-physical", material: "الرمل", testName: "نسبة الرطوبة", unit: "%", standard: "ASTM C566", min: 1.5, max: 5.5, minValue: 0, maxValue: 8, passRate: 0.92 },
+  { category: "aggregate-physical", material: "الرمل", testName: "الامتصاص", unit: "%", standard: "ASTM C128", min: 0.7, max: 1.9, minValue: 0, maxValue: 3, passRate: 0.95 },
+  { category: "aggregate-physical", material: "السن 1", testName: "التدرج الحبيبي (انحراف المنحنى)", unit: "%", standard: "ASTM C33 / EN 12620", min: -3.5, max: 3.5, minValue: -5, maxValue: 5, passRate: 0.9 },
+  { category: "water", material: "المياه", testName: "الرقم الهيدروجيني", unit: "pH", standard: "ASTM D1293", min: 6.5, max: 8.4, minValue: 6, maxValue: 9, passRate: 0.98 },
+  { category: "fresh", material: "الخلطة الطازجة", testName: "الهبوط", unit: "mm", standard: "ASTM C143", min: 85, max: 125, minValue: 80, maxValue: 130, passRate: 0.88 },
+  { category: "fresh", material: "الخلطة الطازجة", testName: "الكثافة الطازجة", unit: "kg/m³", standard: "ASTM C138", min: 2230, max: 2410, minValue: 2200, maxValue: 2450, passRate: 0.93 },
+  { category: "block", material: "البلوك الأسمنتي", testName: "مقاومة الضغط", unit: "MPa", standard: "ASTM C140", min: 7.2, max: 9.8, minValue: 7, passRate: 0.87 },
+  { category: "brick", material: "الطوب الأسمنتي", testName: "مقاومة الضغط", unit: "MPa", standard: "ASTM C55 / C140", min: 10.4, max: 13.6, minValue: 10, passRate: 0.89 },
+  { category: "paver", material: "الإنترلوك", testName: "مقاومة البري", unit: "mm", standard: "EN 1338", min: 14, max: 22, minValue: 0, maxValue: 23, passRate: 0.91 },
+  { category: "hardened", material: "الخرسانة المتصلدة", testName: "مقاومة الضغط", unit: "MPa", standard: "ASTM C39", min: 25.5, max: 33.5, minValue: 25, passRate: 0.93 },
+];
 
 main()
   .catch((e) => { console.error(e); process.exit(1); })
