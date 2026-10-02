@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { useTheme } from "next-themes";
 import { signOut } from "next-auth/react";
-import { Search, Bell, Moon, Sun, LogOut, User as UserIcon, Languages } from "lucide-react";
+import { Search, Bell, LogOut, User as UserIcon, Languages } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/shared/theme-toggle";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -23,7 +23,6 @@ function initials(name: string) {
 
 export function Topbar({ name, role }: { name: string; role: Role }) {
   const pathname = usePathname();
-  const { theme, setTheme } = useTheme();
   const { locale, setLocale, t } = useI18n();
   const [paletteOpen, setPaletteOpen] = useState(false);
 
@@ -77,10 +76,7 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
           <span className="hidden sm:inline">{locale === "en" ? "عربي" : "EN"}</span>
         </Button>
 
-        <Button variant="ghost" size="icon" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-          <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        </Button>
+        <ThemeToggle />
 
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-4 w-4" />

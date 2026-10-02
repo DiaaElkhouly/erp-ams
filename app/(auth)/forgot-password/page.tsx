@@ -29,7 +29,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <Card className="border-white/10 bg-white/95 backdrop-blur">
+    <Card className="w-full max-w-md border-border/60 bg-card/85 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:shadow-black/40">
       <CardHeader>
         <CardTitle className="text-xl">إعادة تعيين كلمة المرور</CardTitle>
         <CardDescription>سننشئ رابطًا آمنًا لإعادة تعيين كلمة المرور.</CardDescription>
