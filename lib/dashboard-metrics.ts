@@ -314,7 +314,12 @@ function aggregate(orders: SalesRecord[], purchases: PurchaseRecord[]) {
   };
 }
 
-async function buildWindow(range: DateRange) {
+/**
+ * One fully-aggregated window: KPIs plus the unsliced per-item / per-customer /
+ * per-supplier lists. Exported so the reports suite can reuse the exact same
+ * aggregation instead of recomputing it.
+ */
+export async function buildWindow(range: DateRange) {
   const [sales, purchases, workOrders, labRecords] = await Promise.all([
     loadSales(range.from, range.to),
     loadPurchases(range.from, range.to),

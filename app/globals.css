@@ -64,3 +64,138 @@
 
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/*
+ * Report printing / "Save as PDF".
+ * Chrome (sidebar, topbar, filters, buttons) is hidden with Tailwind's
+ * `print:hidden` utility; this block flattens the scrolling shell, forces a
+ * legible Arabic-capable font, raises contrast, and lets background tints print
+ * so table structure survives on paper.
+ */
+@media print {
+  @page {
+    size: A4 landscape;
+    margin: 10mm;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    height: auto !important;
+    overflow: visible !important;
+    /* Subpixel AA is unavailable on paper; grayscale AA is sharper. */
+    -webkit-font-smoothing: auto;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .dark,
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #ffffff;
+    --card-foreground: #000000;
+    --popover: #ffffff;
+    --popover-foreground: #000000;
+    --primary: #14337a;
+    --primary-foreground: #ffffff;
+    --secondary: #eef2f7;
+    --secondary-foreground: #000000;
+    --muted: #eef2f7;
+    --muted-foreground: #334155;
+    --accent: #e4ecfb;
+    --accent-foreground: #14337a;
+    --destructive: #b91c1c;
+    --destructive-foreground: #ffffff;
+    --success: #15803d;
+    --success-foreground: #ffffff;
+    --warning: #b45309;
+    --warning-foreground: #ffffff;
+    --border: #94a3b8;
+    --input: #94a3b8;
+    --ring: #14337a;
+  }
+
+  /*
+   * Inter carries no Arabic glyphs, so print swaps the whole family for a UI
+   * face with real Arabic coverage. Overriding the font variable keeps every
+   * `font-sans` element in sync without touching the screen stylesheet.
+   */
+  .dark,
+  :root {
+    --font-inter: "Segoe UI", "Noto Sans Arabic", "Noto Naskh Arabic", Dubai, Tahoma,
+      "Times New Roman", Arial, sans-serif;
+    --font-jbmono: Consolas, "Courier New", monospace;
+  }
+
+  /*
+   * Tailwind's text-* utilities outrank bare element selectors, so the print
+   * scale needs !important to actually take effect.
+   */
+  body {
+    font-size: 11pt !important;
+    line-height: 1.55 !important;
+  }
+
+  h1 {
+    font-size: 17pt !important;
+    line-height: 1.3 !important;
+  }
+
+  h2 {
+    font-size: 13pt !important;
+    line-height: 1.3 !important;
+  }
+
+  table {
+    font-size: 10pt !important;
+    line-height: 1.4 !important;
+  }
+
+  table th,
+  table td {
+    padding: 5px 8px !important;
+  }
+
+  /* Scrolling wrappers must not clip wide report tables on paper. */
+  [data-print-root],
+  [data-print-root] > div,
+  [data-print-root] .overflow-x-auto,
+  [data-print-root] .overflow-auto {
+    display: block !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+
+  /* Single-report PDF: everything the client flagged is dropped. */
+  [data-print-exclude="true"] {
+    display: none !important;
+  }
+
+  .print\:break-inside-avoid {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  table {
+    break-inside: auto;
+  }
+
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  thead tr {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+}

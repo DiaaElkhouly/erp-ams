@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2, Truck, X } from "lucide-react";
+import { Plus, Trash2, Truck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,7 @@ import { NativeSelect } from "@/components/ui/select-native";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
@@ -77,46 +77,143 @@ function NewPurchaseOrderDialog() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ supplierId, lines: lines.filter((l) => l.itemId) }),
     }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error ?? "Failed"); return r.json(); }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-orders"] }); toast.success("تم إنشاء طلب الشراء"); setOpen(false); setLines([{ itemId: "", quantity: 1, unitCost: 0 }]); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["purchase-orders"] }); toast.success("تم إنشاء طلب الشراء"); setOpen(false); setSupplierId(""); setLines([{ itemId: "", quantity: 1, unitCost: 0 }]); },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const filledLines = lines.filter((l) => l.itemId);
+  const orderTotal = filledLines.reduce((sum, l) => sum + l.quantity * l.unitCost, 0);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> طلب شراء جديد</Button></DialogTrigger>
-      <DialogContent className="max-w-xl">
-        <DialogHeader><DialogTitle>إنشاء طلب شراء</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label>المورد</Label>
-            <NativeSelect className="w-full" value={supplierId} onChange={(e) => setSupplierId(e.target.value)}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>إنشاء طلب شراء</DialogTitle>
+          <DialogDescription>حدّد المورد ثم أضف بنود الطلب مع الكمية وسعر الشراء.</DialogDescription>
+        </DialogHeader>
+
+        {/* Long orders scroll inside the dialog instead of stretching it past the viewport. */}
+        <div className="-mx-1 max-h-[55vh] space-y-5 overflow-y-auto px-1">
+          <div className="grid gap-1.5">
+            <Label htmlFor="purchase-order-supplier">المورد</Label>
+            <NativeSelect
+              id="purchase-order-supplier"
+              className="w-full"
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+            >
               <option value="">اختر المورد...</option>
               {supData?.suppliers.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </NativeSelect>
           </div>
-          <Label>بنود الطلب</Label>
-          {lines.map((line, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <NativeSelect className="flex-1" value={line.itemId} onChange={(e) => {
-                const item = itemsData?.items.find((it: any) => it.id === e.target.value);
-                setLines(lines.map((l, j) => j === i ? { ...l, itemId: e.target.value, unitCost: item ? Number(item.costPrice) : 0 } : l));
-              }}>
-                <option value="">اختر الصنف...</option>
-                {itemsData?.items.map((it: any) => <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>)}
-              </NativeSelect>
-              <Input type="number" min={1} className="w-20" value={line.quantity} onChange={(e) => setLines(lines.map((l, j) => j === i ? { ...l, quantity: Number(e.target.value) } : l))} />
-              <Input type="number" min={0} step="0.01" className="w-24" value={line.unitCost} onChange={(e) => setLines(lines.map((l, j) => j === i ? { ...l, unitCost: Number(e.target.value) } : l))} />
-              <Button variant="ghost" size="icon" onClick={() => setLines(lines.filter((_, j) => j !== i))}><X className="h-4 w-4" /></Button>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label>بنود الطلب</Label>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setLines([...lines, { itemId: "", quantity: 1, unitCost: 0 }])}
+              >
+                <Plus className="h-3.5 w-3.5" /> إضافة بند
+              </Button>
             </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={() => setLines([...lines, { itemId: "", quantity: 1, unitCost: 0 }])}><Plus className="h-3 w-3" /> إضافة بند</Button>
+
+            {/* The select column is minmax(0,1fr) and the select itself carries min-w-0:
+                a native <select> is sized by its widest <option>, so without both it
+                refuses to shrink and spills outside the dialog. */}
+            <div className="hidden grid-cols-[minmax(0,1fr)_5rem_7rem_2.25rem] items-center gap-2 px-0.5 text-xs font-medium text-muted-foreground sm:grid">
+              <span>الصنف</span>
+              <span className="text-center">الكمية</span>
+              <span className="text-center">سعر الشراء</span>
+              <span />
+            </div>
+
+            <div className="space-y-2">
+              {lines.map((line, i) => (
+                <div
+                  key={i}
+                  className="grid grid-cols-1 items-center gap-2 rounded-lg border border-dashed p-3 sm:grid-cols-[minmax(0,1fr)_5rem_7rem_2.25rem] sm:border-0 sm:p-0"
+                >
+                  <div className="grid gap-1.5 sm:contents">
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">الصنف</span>
+                    <NativeSelect
+                      className="w-full min-w-0"
+                      aria-label={`الصنف ${i + 1}`}
+                      value={line.itemId}
+                      onChange={(e) => {
+                        const item = itemsData?.items.find((it: any) => it.id === e.target.value);
+                        setLines(lines.map((l, j) => j === i ? { ...l, itemId: e.target.value, unitCost: item ? Number(item.costPrice) : 0 } : l));
+                      }}
+                    >
+                      <option value="">اختر الصنف...</option>
+                      {itemsData?.items.map((it: any) => <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>)}
+                    </NativeSelect>
+                  </div>
+                  <div className="grid gap-1.5 sm:contents">
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">الكمية</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      aria-label={`الكمية ${i + 1}`}
+                      className="w-full text-center"
+                      value={line.quantity}
+                      onChange={(e) => setLines(lines.map((l, j) => j === i ? { ...l, quantity: Number(e.target.value) } : l))}
+                    />
+                  </div>
+                  <div className="grid gap-1.5 sm:contents">
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">سعر الشراء</span>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      aria-label={`سعر الشراء ${i + 1}`}
+                      className="w-full text-center"
+                      value={line.unitCost}
+                      onChange={(e) => setLines(lines.map((l, j) => j === i ? { ...l, unitCost: Number(e.target.value) } : l))}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="justify-self-end text-muted-foreground hover:text-destructive sm:justify-self-center"
+                    disabled={lines.length === 1}
+                    aria-label={`حذف البند ${i + 1}`}
+                    onClick={() => setLines(lines.filter((_, j) => j !== i))}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2">
+              <span className="text-sm text-muted-foreground">البنود المكتملة</span>
+              <span className="text-sm font-medium tabular-nums">{filledLines.length} من {lines.length}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2">
+              <span className="text-sm text-muted-foreground">إجمالي الطلب</span>
+              <span className="text-sm font-semibold tabular-nums">{formatCurrency(orderTotal)}</span>
+            </div>
+          </div>
         </div>
-        <DialogFooter><Button disabled={isPending || !supplierId} onClick={() => mutate()}>{isPending ? "جارٍ الحفظ..." : "إنشاء الطلب"}</Button></DialogFooter>
+
+        <DialogFooter>
+          <Button
+            disabled={isPending || !supplierId || filledLines.length === 0}
+            onClick={() => mutate()}
+          >
+            {isPending ? "جارٍ الحفظ..." : "إنشاء الطلب"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-
 function OrdersTab() {
   const { data, isLoading } = usePurchaseOrders();
   const qc = useQueryClient();

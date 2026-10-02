@@ -97,7 +97,7 @@ export function DateRangeFilter({ fallbackFrom }: { fallbackFrom?: string }) {
   }, [apply, fromDate, toDate, fromTime, toTime]);
 
   return (
-    <div className="space-y-4 rounded-lg border bg-card p-4">
+    <div className="space-y-4 rounded-lg border bg-card p-4 print:hidden">
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <CalendarDays className="h-4 w-4" />

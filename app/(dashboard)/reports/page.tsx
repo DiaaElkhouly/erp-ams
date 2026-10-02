@@ -1,97 +1,97 @@
-import { db } from "@/lib/db";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { Suspense } from "react";
+import { DateRangeFilter } from "@/components/shared/date-range-filter";
+import { ReportExportButtons } from "@/components/shared/report-export-buttons";
+import { ReportMetricsStrip, ReportSectionCard } from "@/components/shared/report-view";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
-import { formatCurrency } from "@/lib/utils";
+import { DateRangeParams, resolveDateRange } from "@/lib/date-range";
+import { getEarliestRecordDate } from "@/lib/dashboard-metrics";
+import { getReportSuite } from "@/lib/report-data";
+import { formatDateTime } from "@/lib/utils";
 
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة", CONFIRMED: "مؤكد", FULFILLED: "منفذ", CANCELLED: "ملغى", ORDERED: "تم الطلب", RECEIVED: "مستلم",
-};
+export const dynamic = "force-dynamic";
 
-async function getReportData() {
-  const items = await db.item.findMany({ include: { stockLevels: true }, where: { isActive: true } });
-  const lowStock = items
-    .map((i) => ({ ...i, onHand: i.stockLevels.reduce((s, l) => s + l.quantity, 0) }))
-    .filter((i) => i.onHand <= i.reorderPoint)
-    .sort((a, b) => a.onHand - b.onHand);
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const rawParams = await searchParams;
+  const param = (key: string): string | undefined => {
+    const value = rawParams[key];
+    return Array.isArray(value) ? value[0] : value;
+  };
+  const params: DateRangeParams = {
+    preset: param("preset"),
+    from: param("from"),
+    to: param("to"),
+    fromTime: param("fromTime"),
+    toTime: param("toTime"),
+  };
 
-  const inventoryValue = items.reduce(
-    (sum, i) => sum + i.stockLevels.reduce((s, l) => s + l.quantity, 0) * Number(i.costPrice), 0
-  );
+  const earliest = await getEarliestRecordDate();
+  const range = resolveDateRange(params, earliest);
+  const suite = await getReportSuite(range);
 
-  const [salesByStatus, purchaseByStatus] = await Promise.all([
-    db.salesOrder.groupBy({ by: ["status"], _count: { _all: true } }),
-    db.purchaseOrder.groupBy({ by: ["status"], _count: { _all: true } }),
-  ]);
-
-  return { lowStock, inventoryValue, salesByStatus, purchaseByStatus, totalSkus: items.length };
-}
-
-export default async function ReportsPage() {
-  const data = await getReportData();
+  const printedAt = formatDateTime(suite.generatedAt);
+  const isEmpty = suite.sections.every((section) => section.rows.length === 0);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">التقارير</h1>
-        <p className="text-sm text-muted-foreground">ملخصات تشغيلية للمخزون والمبيعات والمشتريات.</p>
+    <div className="space-y-6 print:pb-10">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">التقارير</h1>
+          <p className="text-sm text-muted-foreground">
+            تقارير تفصيلية قابلة للتصدير إلى Excel و PDF عن الفترة{" "}
+            <span className="tabular-nums">{suite.rangeLabel}</span>
+          </p>
+        </div>
+        <Suspense fallback={null}>
+          <ReportExportButtons disabled={isEmpty} />
+        </Suspense>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-medium text-muted-foreground">إجمالي قيمة المخزون</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-semibold">{formatCurrency(data.inventoryValue)}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-medium text-muted-foreground">الأصناف النشطة</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-semibold">{data.totalSkus}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-xs font-medium text-muted-foreground">أصناف تحت نقطة إعادة الطلب</CardTitle></CardHeader>
-          <CardContent><div className="text-2xl font-semibold text-destructive">{data.lowStock.length}</div></CardContent>
-        </Card>
+      {/* Print-only identity block: the client swaps its title when a single
+          report is printed, and it repeats on every PDF page as a footer. */}
+      <div className="hidden print:block">
+        <h1 data-print-section-title className="text-lg font-semibold">
+          {suite.title}
+        </h1>
+        <p className="text-[10pt] text-muted-foreground">
+          الفترة: <span className="tabular-nums">{suite.rangeLabel}</span> · تاريخ الاستخراج:{" "}
+          <span className="tabular-nums">{printedAt}</span> · العملة: {suite.currency}
+        </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>تقرير المخزون المنخفض</CardTitle>
-          <CardDescription>الأصناف عند نقطة إعادة الطلب المحددة أو أقل</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {data.lowStock.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">مستويات المخزون كافية لجميع الأصناف.</p>
-          ) : (
-            <Table>
-              <TableHeader><TableRow><TableHead>رمز الصنف</TableHead><TableHead>الاسم</TableHead><TableHead>المتاح</TableHead><TableHead>نقطة إعادة الطلب</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {data.lowStock.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell className="font-mono text-xs">{i.sku}</TableCell>
-                    <TableCell>{i.name}</TableCell>
-                    <TableCell className="font-semibold text-destructive">{i.onHand} {i.unit}</TableCell>
-                    <TableCell>{i.reorderPoint}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>طلبات البيع حسب الحالة</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {data.salesByStatus.map((s) => <Badge key={s.status} variant="secondary">{STATUS_LABELS[s.status]}: {s._count._all}</Badge>)}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>طلبات الشراء حسب الحالة</CardTitle></CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {data.purchaseByStatus.map((s) => <Badge key={s.status} variant="secondary">{STATUS_LABELS[s.status]}: {s._count._all}</Badge>)}
-          </CardContent>
-        </Card>
+      {/* Repeats on every PDF page because print layouts treat it as fixed. */}
+      <div className="hidden print:block print:fixed print:bottom-0 print:left-0 print:right-0 print:border-t print:pb-1 print:pt-1 print:text-[8pt] print:text-muted-foreground">
+        IMS Manufacturing · {suite.title} · <span className="tabular-nums">{suite.rangeLabel}</span>
       </div>
+
+      <DateRangeFilter fallbackFrom={earliest?.toISOString()} />
+
+      <div
+        data-print-role="meta"
+        className="flex flex-wrap items-center gap-1.5 print:hidden"
+      >
+        <Badge variant="outline">
+          {suite.sections.length} تقرير · <span className="tabular-nums">{printedAt}</span>
+        </Badge>
+        <Badge variant="outline">العملة: {suite.currency}</Badge>
+      </div>
+
+      <section className="space-y-3">
+        <div data-print-role="summary-heading" className="print:hidden">
+          <h2 className="text-base font-semibold tracking-tight">المؤشرات الملخصة</h2>
+          <p className="text-xs text-muted-foreground">
+            الأرقام الأساسية للفترة المختارة مقارنة بالفترة السابقة لها
+          </p>
+        </div>
+        <ReportMetricsStrip metrics={suite.metrics} />
+      </section>
+
+      {suite.sections.map((section) => (
+        <ReportSectionCard key={section.id} section={section} />
+      ))}
     </div>
   );
 }

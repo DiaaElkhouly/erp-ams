@@ -41,7 +41,7 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between gap-2 border-b bg-card px-3 sm:gap-4 sm:px-4">
+    <header className="flex h-14 items-center justify-between gap-2 border-b bg-card px-3 sm:gap-4 sm:px-4 print:hidden">
       <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground sm:gap-3">
         <MobileNav role={role} />
         <span className="hidden shrink-0 sm:inline">{t.home}</span>
