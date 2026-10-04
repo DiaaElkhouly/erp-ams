@@ -162,8 +162,10 @@ const safePct = (part: number, whole: number) => (whole > 0 ? (part / whole) * 1
 const round2 = (value: number) => Math.round(value * 100) / 100;
 
 /**
- * SalesOrderLine has no cost snapshot, so COGS is resolved against Item.costPrice
- * at query time. Historical margins therefore shift if an item's cost is edited.
+ * COGS prefers SalesOrderLine.unitCost, frozen onto the line when the order was
+ * fulfilled, and falls back to Item.costPrice only for lines that never fulfilled.
+ * So editing an item's cost moves the margin of open orders but leaves closed ones
+ * reported as they actually were.
  */
 async function loadSales(from: Date, to: Date): Promise<SalesRecord[]> {
   const orders = await db.salesOrder.findMany({
@@ -183,7 +185,7 @@ async function loadSales(from: Date, to: Date): Promise<SalesRecord[]> {
     lines: order.lines.map((line) => ({
       quantity: line.quantity,
       unitPrice: Number(line.unitPrice),
-      costPrice: Number(line.item.costPrice),
+      costPrice: Number(line.unitCost ?? line.item.costPrice),
       itemId: line.itemId,
       sku: line.item.sku,
       name: line.item.name,

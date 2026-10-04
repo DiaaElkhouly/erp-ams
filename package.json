@@ -8,10 +8,13 @@
     "vercel-build": "prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:fix-work-order-items": "tsx scripts/fix-work-order-item-ids.ts",
     "db:studio": "prisma studio",
     "db:reset": "prisma migrate reset --force"
   },
@@ -71,6 +74,7 @@
     "postcss": "8.4.49",
     "tailwindcss": "3.4.14",
     "tailwindcss-animate": "1.0.7",
-    "tsx": "4.19.2"
+    "tsx": "4.19.2",
+    "vitest": "2.1.8"
   }
 }

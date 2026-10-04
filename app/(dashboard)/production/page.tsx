@@ -44,13 +44,13 @@ function NewWorkOrderDialog() {
   const [form, setForm] = useState({ bomId: "", warehouseId: "", quantity: 1, dueDate: "" });
   const qc = useQueryClient();
 
-  const selectedBom = bomData?.boms.find((b: any) => b.id === form.bomId);
-
+  // The finished good is derived from the BOM server-side. Never send itemId from
+  // here: the BOM's first component is a raw material, not the good being made.
   const { mutate, isPending } = useMutation({
     mutationFn: () => fetch("/api/work-orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, itemId: selectedBom?.components?.[0]?.item?.id, bomId: form.bomId }),
+      body: JSON.stringify(form),
     }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error ?? "Failed"); return r.json(); }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["work-orders"] });
@@ -70,7 +70,7 @@ function NewWorkOrderDialog() {
             <Label>قائمة المواد</Label>
             <NativeSelect className="w-full" value={form.bomId} onChange={(e) => setForm({ ...form, bomId: e.target.value })}>
               <option value="">اختر قائمة المواد...</option>
-              {bomData?.boms.map((b: any) => <option key={b.id} value={b.id}>{b.name} (v{b.version})</option>)}
+              {bomData?.boms.map((b: any) => <option key={b.id} value={b.id}>{b.name} (v{b.version}) &rarr; {b.finishedItem?.sku}</option>)}
             </NativeSelect>
           </div>
           <div className="space-y-1.5">

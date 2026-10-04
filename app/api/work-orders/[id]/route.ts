@@ -1,10 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { conflict, notFound } from "@/lib/api-error";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
+import { applyMovements } from "@/lib/inventory/stock-service";
+import { planWorkOrderCompletion } from "@/lib/inventory/work-order-completion";
 
 const statusSchema = z.object({
   status: z.enum(["PLANNED", "RELEASED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]),
+  /** Units produced but rejected. Omit for a clean run. */
+  scrapQty: z.coerce.number().int().nonnegative().optional(),
 });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -13,22 +18,56 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = statusSchema.parse(await req.json());
-    const workOrder = await db.workOrder.update({
-      where: { id },
-      data: {
-        status: body.status,
-        completedAt: body.status === "COMPLETED" ? new Date() : undefined,
-      },
-    });
 
-    // On completion, increment finished-goods stock in the target warehouse.
-    if (body.status === "COMPLETED") {
-      await db.stockLevel.upsert({
-        where: { itemId_warehouseId: { itemId: workOrder.itemId, warehouseId: workOrder.warehouseId } },
-        create: { itemId: workOrder.itemId, warehouseId: workOrder.warehouseId, quantity: workOrder.quantity },
-        update: { quantity: { increment: workOrder.quantity } },
+    const workOrder = await db.$transaction(async (tx) => {
+      const current = await tx.workOrder.findUnique({
+        where: { id },
+        include: { bom: { include: { components: true } } },
       });
-    }
+      if (!current) throw notFound("Work order not found");
+
+      // Completion and cancellation both move stock, and nothing here reverses it.
+      // Refusing to leave COMPLETED keeps the ledger append-only, and refusing to
+      // re-complete stops the same batch being consumed and credited twice.
+      if (current.status === "COMPLETED") {
+        throw conflict(`Work order ${current.orderNumber} is already completed and cannot change status`);
+      }
+
+      if (body.status !== "COMPLETED") {
+        return tx.workOrder.update({ where: { id }, data: { status: body.status } });
+      }
+
+      // The BOM owns the finished good. A work order pointing anywhere else is a
+      // corrupt row from before the foreign key existed; refuse to move stock on it.
+      if (current.itemId !== current.bom.finishedItemId) {
+        throw conflict(
+          `Work order ${current.orderNumber} is not set up to produce the BOM's finished good. ` +
+            `Repoint it before completing.`,
+          { bomFinishedItemId: current.bom.finishedItemId, workOrderItemId: current.itemId },
+        );
+      }
+
+      const movements = planWorkOrderCompletion(
+        {
+          orderId: current.id,
+          orderNumber: current.orderNumber,
+          warehouseId: current.warehouseId,
+          quantity: current.quantity,
+          finishedItemId: current.bom.finishedItemId,
+          components: current.bom.components,
+        },
+        body.scrapQty,
+      );
+
+      // One transaction: if any component is short, applyMovement throws and the
+      // order stays IN_PROGRESS with the ledger untouched.
+      await applyMovements(tx, movements);
+
+      return tx.workOrder.update({
+        where: { id },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      });
+    });
 
     return NextResponse.json(workOrder);
   } catch (err) {

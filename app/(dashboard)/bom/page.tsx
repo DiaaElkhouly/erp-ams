@@ -25,7 +25,7 @@ function NewBomDialog() {
   const [open, setOpen] = useState(false);
   const { data: itemsData } = useItemsList();
   const [name, setName] = useState("");
-  const [finishedSku, setFinishedSku] = useState("");
+  const [finishedItemId, setFinishedItemId] = useState("");
   const [version, setVersion] = useState("1.0");
   const [rows, setRows] = useState<{ itemId: string; quantity: number }[]>([{ itemId: "", quantity: 1 }]);
   const qc = useQueryClient();
@@ -34,13 +34,13 @@ function NewBomDialog() {
     mutationFn: () => fetch("/api/boms", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, finishedSku, version, components: rows.filter((r) => r.itemId) }),
+      body: JSON.stringify({ name, finishedItemId, version, components: rows.filter((r) => r.itemId) }),
     }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error ?? "Failed"); return r.json(); }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["boms"] });
       toast.success("تم إنشاء قائمة المواد");
       setOpen(false);
-      setName(""); setFinishedSku(""); setRows([{ itemId: "", quantity: 1 }]);
+      setName(""); setFinishedItemId(""); setRows([{ itemId: "", quantity: 1 }]);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -58,7 +58,16 @@ function NewBomDialog() {
             </div>
             <div className="space-y-1.5">
               <Label>رمز المنتج النهائي</Label>
-              <Input value={finishedSku} onChange={(e) => setFinishedSku(e.target.value)} placeholder="FG-2001" />
+              <NativeSelect
+                className="w-full"
+                value={finishedItemId}
+                onChange={(e) => setFinishedItemId(e.target.value)}
+              >
+                <option value="">اختر صنفًا...</option>
+                {itemsData?.items
+                  .filter((it: any) => it.type === "FINISHED_GOOD")
+                  .map((it: any) => <option key={it.id} value={it.id}>{it.sku} - {it.name}</option>)}
+              </NativeSelect>
             </div>
           </div>
           <div className="space-y-1.5">
@@ -94,7 +103,7 @@ function NewBomDialog() {
           </div>
         </div>
         <DialogFooter>
-          <Button disabled={isPending || !name || !finishedSku} onClick={() => mutate()}>
+          <Button disabled={isPending || !name || !finishedItemId} onClick={() => mutate()}>
             {isPending ? "جارٍ الحفظ..." : "حفظ قائمة المواد"}
           </Button>
         </DialogFooter>
@@ -135,7 +144,7 @@ export default function BomPage() {
             <CardHeader className="flex-row items-start justify-between space-y-0">
               <div>
                 <CardTitle>{bom.name}</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">{bom.finishedSku} &middot; v{bom.version}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{bom.finishedItem?.sku} &middot; v{bom.version}</p>
               </div>
               <Button variant="ghost" size="icon" onClick={() => remove(bom.id)}>
                 <Trash2 className="h-4 w-4 text-muted-foreground" />

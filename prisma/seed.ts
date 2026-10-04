@@ -1,7 +1,41 @@
 import { PrismaClient, Role, ItemType, Prisma, SalesOrderStatus, PurchaseOrderStatus, WorkOrderStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { applyMovements } from "../lib/inventory/stock-service";
 
 const db = new PrismaClient();
+
+/**
+ * Posts a starting balance through the movement ledger rather than writing
+ * `stock_levels` directly, so the T1.1 invariant holds after seeding too: a level
+ * is always the sum of that item's movements.
+ *
+ * Guarded on the absence of any movement for the pair, which keeps re-seeding
+ * idempotent. A seed is initial fixture data, not a reconciliation tool - once a
+ * warehouse has movements it owns that stock, and a re-run must not double it.
+ */
+async function seedOpeningBalance(itemId: string, warehouseId: string, quantity: number) {
+  const existing = await db.stockMovement.findFirst({
+    where: { itemId, warehouseId },
+    select: { id: true },
+  });
+  if (existing) return false;
+  if (quantity <= 0) return false;
+
+  await db.$transaction((tx) =>
+    applyMovements(tx, [
+      {
+        itemId,
+        warehouseId,
+        qtyDelta: quantity,
+        reason: "OPENING_BALANCE",
+        refType: "SEED",
+        refId: "prisma/seed.ts",
+        note: "Seeded opening balance",
+      },
+    ]),
+  );
+  return true;
+}
 
 async function main() {
   console.log("Seeding database...");
@@ -72,26 +106,11 @@ async function main() {
     create: { sku: "CS-4001", name: "Industrial Lubricant 1L", type: ItemType.CONSUMABLE, unit: "bottle", costPrice: 6, salePrice: 0, reorderPoint: 15, reorderQty: 60 },
   });
 
-  await db.stockLevel.upsert({
-    where: { itemId_warehouseId: { itemId: steel.id, warehouseId: warehouseA.id } }, update: { quantity: 40 },
-    create: { itemId: steel.id, warehouseId: warehouseA.id, quantity: 40 },
-  });
-  await db.stockLevel.upsert({
-    where: { itemId_warehouseId: { itemId: bolt.id, warehouseId: warehouseA.id } }, update: { quantity: 3000 },
-    create: { itemId: bolt.id, warehouseId: warehouseA.id, quantity: 3000 },
-  });
-  await db.stockLevel.upsert({
-    where: { itemId_warehouseId: { itemId: bracketComp.id, warehouseId: warehouseB.id } }, update: { quantity: 35 },
-    create: { itemId: bracketComp.id, warehouseId: warehouseB.id, quantity: 35 },
-  });
-  await db.stockLevel.upsert({
-    where: { itemId_warehouseId: { itemId: finishedUnit.id, warehouseId: warehouseA.id } }, update: { quantity: 8 },
-    create: { itemId: finishedUnit.id, warehouseId: warehouseA.id, quantity: 8 },
-  });
-  await db.stockLevel.upsert({
-    where: { itemId_warehouseId: { itemId: lubricant.id, warehouseId: warehouseB.id } }, update: { quantity: 22 },
-    create: { itemId: lubricant.id, warehouseId: warehouseB.id, quantity: 22 },
-  });
+  await seedOpeningBalance(steel.id, warehouseA.id, 40);
+  await seedOpeningBalance(bolt.id, warehouseA.id, 3000);
+  await seedOpeningBalance(bracketComp.id, warehouseB.id, 35);
+  await seedOpeningBalance(finishedUnit.id, warehouseA.id, 8);
+  await seedOpeningBalance(lubricant.id, warehouseB.id, 22);
 
   const factoryWarehouse = await db.warehouse.upsert({
     where: { code: "WH-EGYPT-FACTORY" }, update: {},
@@ -128,18 +147,14 @@ async function main() {
     ["FG-BRICK-10", factoryYard.id, 5400], ["FG-PAVER-06", factoryYard.id, 7600],
   ] as const;
   for (const [sku, warehouseId, quantity] of factoryStock) {
-    const item = factoryItems[sku];
-    await db.stockLevel.upsert({
-      where: { itemId_warehouseId: { itemId: item.id, warehouseId } }, update: {},
-      create: { itemId: item.id, warehouseId, quantity },
-    });
+    await seedOpeningBalance(factoryItems[sku].id, warehouseId, quantity);
   }
 
-  const existingBom = await db.bom.findFirst({ where: { finishedSku: "FG-3001" } });
+  const existingBom = await db.bom.findFirst({ where: { finishedItemId: finishedUnit.id } });
   const bom = existingBom ?? await db.bom.create({
     data: {
       name: "Heavy-Duty Shelf Unit Assembly",
-      finishedSku: "FG-3001",
+      finishedItemId: finishedUnit.id,
       version: "1.0",
       components: {
         create: [
@@ -167,13 +182,14 @@ async function main() {
     });
   }
 
-  const seedFactoryBom = async (name: string, finishedSku: string, parts: [string, number][]) => {
-    const existing = await db.bom.findFirst({ where: { finishedSku } });
+  const seedFactoryBom = async (name: string, sku: string, parts: [string, number][]) => {
+    const finishedItemId = factoryItems[sku].id;
+    const existing = await db.bom.findFirst({ where: { finishedItemId } });
     if (existing) return existing;
     return db.bom.create({
       data: {
-        name, finishedSku, version: "1.0",
-        components: { create: parts.map(([sku, quantity]) => ({ itemId: factoryItems[sku].id, quantity })) },
+        name, finishedItemId, version: "1.0",
+        components: { create: parts.map(([componentSku, quantity]) => ({ itemId: factoryItems[componentSku].id, quantity })) },
       },
     });
   };
@@ -435,8 +451,10 @@ async function seedHistory(adminId: string, ctx: HistoryContext) {
     select: { id: true, sku: true, costPrice: true, salePrice: true, reorderPoint: true },
   });
   const itemBySku = new Map(items.map((item) => [item.sku, item]));
-  const factoryBoms = await db.bom.findMany({ select: { id: true, finishedSku: true } });
-  const bomBySku = new Map(factoryBoms.map((bom) => [bom.finishedSku, bom.id]));
+  const factoryBoms = await db.bom.findMany({
+    select: { id: true, finishedItemId: true, finishedItem: { select: { sku: true } } },
+  });
+  const bomBySku = new Map(factoryBoms.map((bom) => [bom.finishedItem.sku, bom.id]));
   const warehouses = await db.warehouse.findMany({ select: { id: true, code: true } });
   const yardId = warehouses.find((w) => w.code === "WH-EGYPT-YARD")?.id ?? ctx.factoryYardId;
 

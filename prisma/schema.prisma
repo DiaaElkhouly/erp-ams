@@ -101,7 +101,9 @@ model Item {
   updatedAt     DateTime @updatedAt
 
   stockLevels     StockLevel[]
+  stockMovements  StockMovement[]
   bomComponents   BomComponent[]
+  finishedBoms    Bom[]             @relation("BomFinishedItem")
   workOrders      WorkOrder[]
   salesOrderLines SalesOrderLine[]
   poLines         PurchaseOrderLine[]
@@ -118,9 +120,11 @@ model Warehouse {
   location  String?
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  stockLevels StockLevel[]
-  workOrders  WorkOrder[]
+  stockLevels    StockLevel[]
+  stockMovements StockMovement[]
+  workOrders     WorkOrder[]
 
   @@map("warehouses")
 }
@@ -139,21 +143,66 @@ model StockLevel {
   @@map("stock_levels")
 }
 
+/// Every quantity change to a StockLevel, as an immutable signed delta.
+/// StockLevel.quantity is a projection of the sum of these rows, so the
+/// ledger and the on-hand number can never disagree.
+enum StockMovementReason {
+  /// Baseline recorded when the ledger was introduced. Never written by the app.
+  OPENING_BALANCE
+  /// Goods received against a purchase order.
+  PURCHASE_RECEIPT
+  /// Finished units credited by completing a work order.
+  PRODUCTION_OUTPUT
+  /// BOM components consumed by completing a work order.
+  PRODUCTION_CONSUMPTION
+  /// Finished units written off as scrap at work-order completion.
+  SCRAP_WRITEOFF
+  /// Units issued to a customer on sales-order fulfilment.
+  SALES_ISSUE
+  /// Manual correction, e.g. a miscount found during a cycle count.
+  ADJUSTMENT
+}
+
+model StockMovement {
+  id          String              @id @default(cuid())
+  itemId      String
+  warehouseId String
+  /// Signed: positive adds stock, negative removes it.
+  qtyDelta    Int
+  reason      StockMovementReason
+  /// Originating aggregate, e.g. "WORK_ORDER" or "SALES_ORDER".
+  refType     String
+  refId       String
+  note        String?
+  occurredAt  DateTime            @default(now())
+  createdAt   DateTime            @default(now())
+
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, occurredAt])
+  @@index([refType, refId])
+  @@map("stock_movements")
+}
+
 // ---------------------------------------------------------------------------
 // PRODUCTION / BOM / MRP
 // ---------------------------------------------------------------------------
 
 model Bom {
-  id         String   @id @default(cuid())
-  name       String
-  finishedSku String
-  version    String   @default("1.0")
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
+  id             String   @id @default(cuid())
+  name           String
+  finishedItemId String
+  version        String   @default("1.0")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  components BomComponent[]
-  workOrders WorkOrder[]
+  finishedItem Item           @relation("BomFinishedItem", fields: [finishedItemId], references: [id])
+  components   BomComponent[]
+  workOrders   WorkOrder[]
 
+  @@index([finishedItemId])
   @@map("boms")
 }
 
@@ -276,6 +325,7 @@ model Customer {
   phone     String?
   address   String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   salesOrders SalesOrder[]
 
@@ -312,6 +362,9 @@ model SalesOrderLine {
   itemId       String
   quantity     Int
   unitPrice    Decimal @db.Decimal(14, 2)
+  /// Cost frozen at fulfilment. Null before that, and for orders that never
+  /// fulfil, in which case reporting falls back to the item's current cost.
+  unitCost     Decimal? @db.Decimal(14, 2)
 
   salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
   item       Item       @relation(fields: [itemId], references: [id])
@@ -330,6 +383,7 @@ model Supplier {
   phone     String?
   address   String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
 

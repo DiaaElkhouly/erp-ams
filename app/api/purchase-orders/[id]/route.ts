@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
+import { conflict, notFound } from "@/lib/api-error";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
+import { applyMovements, defaultWarehouseId, type StockMovementInput } from "@/lib/inventory/stock-service";
 
 const statusSchema = z.object({ status: z.enum(["DRAFT", "ORDERED", "RECEIVED", "CANCELLED"]) });
 
@@ -11,25 +13,47 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   try {
     const { id } = await params;
     const body = statusSchema.parse(await req.json());
-    const order = await db.purchaseOrder.update({
-      where: { id },
-      data: { status: body.status },
-      include: { lines: true },
-    });
 
-    // On receipt, increment stock for each line in the default warehouse (first active one).
-    if (body.status === "RECEIVED") {
-      const warehouse = await db.warehouse.findFirst({ where: { isActive: true } });
-      if (warehouse) {
-        for (const line of order.lines) {
-          await db.stockLevel.upsert({
-            where: { itemId_warehouseId: { itemId: line.itemId, warehouseId: warehouse.id } },
-            create: { itemId: line.itemId, warehouseId: warehouse.id, quantity: line.quantity },
-            update: { quantity: { increment: line.quantity } },
-          });
-        }
+    const order = await db.$transaction(async (tx) => {
+      const current = await tx.purchaseOrder.findUnique({
+        where: { id },
+        include: { lines: true },
+      });
+      if (!current) throw notFound("Purchase order not found");
+
+      // Receiving twice would book the same delivery into stock twice.
+      if (current.status === "RECEIVED") {
+        throw conflict(`Purchase order ${current.orderNumber} is already received and cannot change status`);
       }
-    }
+
+      if (body.status !== "RECEIVED") {
+        return tx.purchaseOrder.update({
+          where: { id },
+          data: { status: body.status },
+          include: { lines: true },
+        });
+      }
+
+      // A purchase order names no warehouse, so stock lands in the agreed default bin.
+      const warehouseId = await defaultWarehouseId(tx);
+      const ref = { refType: "PURCHASE_ORDER", refId: current.id };
+      const receipts: StockMovementInput[] = current.lines.map((line) => ({
+        itemId: line.itemId,
+        warehouseId,
+        qtyDelta: line.quantity,
+        reason: "PURCHASE_RECEIPT",
+        ...ref,
+        note: `Received against purchase order ${current.orderNumber}`,
+      }));
+
+      await applyMovements(tx, receipts);
+
+      return tx.purchaseOrder.update({
+        where: { id },
+        data: { status: "RECEIVED" },
+        include: { lines: true },
+      });
+    });
 
     return NextResponse.json(order);
   } catch (err) {
