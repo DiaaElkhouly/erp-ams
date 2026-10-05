@@ -88,7 +88,7 @@ export default function LoginPage() {
         </div>
       </div>
 
-      <Card className="gap-0 border-border/60 bg-card/85 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:shadow-black/40">
+      <Card className="gap-0 border-border/60 bg-card/85 shadow-2xl shadow-black/10 backdrop-blur-xl dark:shadow-black/40">
         <CardHeader className="space-y-2 p-6 text-center sm:p-8 sm:text-start">
           <CardTitle className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
             {t.signInTo}

@@ -2,8 +2,14 @@ import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
+/*
+ * `rounded-md` and `px-2` come from upstream; this project used `rounded-full`,
+ * which is the one place the pill shape was doing real work (status pills in
+ * tables and card headers). Kept as `rounded-md` to match upstream, but the
+ * `success` / `warning` variants are local additions upstream does not have.
+ */
 const badgeVariants = cva(
-  "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+  "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium transition-[color,box-shadow] [&>svg]:size-3 [&>svg]:pointer-events-none",
   {
     variants: {
       variant: {
@@ -12,7 +18,7 @@ const badgeVariants = cva(
         destructive: "border-transparent bg-destructive text-destructive-foreground",
         success: "border-transparent bg-success text-success-foreground",
         warning: "border-transparent bg-warning text-warning-foreground",
-        outline: "text-foreground border-border",
+        outline: "text-foreground",
       },
     },
     defaultVariants: { variant: "default" },

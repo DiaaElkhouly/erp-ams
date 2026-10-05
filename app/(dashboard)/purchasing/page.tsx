@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -241,6 +242,8 @@ function NewPurchaseOrderDialog() {
 function OrdersTab() {
   const { t } = useI18n();
   const { data, isLoading } = usePurchaseOrders();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const qc = useQueryClient();
   const { mutate: advance } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -267,7 +270,7 @@ function OrdersTab() {
             {!isLoading && data?.purchaseOrders.length === 0 && (
               <TableRow><TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground"><Truck className="mx-auto mb-2 h-6 w-6" /> {t.orders.purchaseEmpty}</TableCell></TableRow>
             )}
-            {data?.purchaseOrders.map((po: any) => {
+            {(data?.purchaseOrders ?? []).slice((page - 1) * pageSize, page * pageSize).map((po: any) => {
               const total = po.lines.reduce((s: number, l: any) => s + l.quantity * Number(l.unitCost), 0);
               const next = STATUS_FLOW[po.status];
               return (
@@ -288,6 +291,15 @@ function OrdersTab() {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={Math.max(1, Math.ceil((data?.purchaseOrders?.length ?? 0) / pageSize))}
+        pageSize={pageSize}
+        total={data?.purchaseOrders?.length ?? 0}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
     </div>
   );
 }

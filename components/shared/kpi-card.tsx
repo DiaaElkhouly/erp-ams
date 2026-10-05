@@ -69,8 +69,8 @@ export function KpiCard({
                   flat
                     ? "bg-muted text-muted-foreground"
                     : good
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                      : "bg-red-500/10 text-red-600 dark:text-red-400",
+                      ? "bg-success/10 text-success"
+                      : "bg-destructive/10 text-destructive",
                 )}
               >
                 <DeltaIcon className="h-3 w-3" />

@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -130,6 +131,8 @@ function EmployeesTab() {
   const { data, isLoading } = useEmployees();
   const qc = useQueryClient();
   const employees = data?.employees ?? [];
+  const [empPage, setEmpPage] = useState(1);
+  const [empPageSize, setEmpPageSize] = useState(10);
 
   const { mutate: update, isPending: updating } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -188,7 +191,7 @@ function EmployeesTab() {
                 </TableCell>
               </TableRow>
             )}
-            {employees.map((employee: any) => (
+            {employees.slice((empPage - 1) * empPageSize, empPage * empPageSize).map((employee: any) => (
               <TableRow key={employee.id}>
                 <TableCell className="font-mono text-xs">{employee.employeeCode}</TableCell>
                 <TableCell className="font-medium">
@@ -223,6 +226,15 @@ function EmployeesTab() {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={empPage}
+        pageCount={Math.max(1, Math.ceil(employees.length / empPageSize))}
+        pageSize={empPageSize}
+        total={employees.length}
+        onPageChange={setEmpPage}
+        onPageSizeChange={(size) => { setEmpPageSize(size); setEmpPage(1); }}
+      />
     </div>
   );
 }
@@ -330,6 +342,8 @@ function AttendanceTab() {
   const { data, isLoading } = useAttendance(date, "");
   const records = data?.attendance ?? [];
   const summary = data?.summary;
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   return (
     <div className="space-y-4">
@@ -380,7 +394,7 @@ function AttendanceTab() {
                 </TableCell>
               </TableRow>
             )}
-            {records.map((record: any) => (
+            {records.slice((page - 1) * pageSize, page * pageSize).map((record: any) => (
               <TableRow key={record.id}>
                 <TableCell>
                   <span className="font-mono text-xs text-muted-foreground">{record.employee?.employeeCode}</span>
@@ -397,6 +411,15 @@ function AttendanceTab() {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={Math.max(1, Math.ceil(records.length / pageSize))}
+        pageSize={pageSize}
+        total={records.length}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
     </div>
   );
 }

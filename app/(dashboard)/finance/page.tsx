@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -435,6 +436,8 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
   const del = useInvoiceDelete(isSupplier);
 
   const rows = (isSupplier ? data?.supplierInvoices : data?.customerInvoices) ?? [];
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const partyOf = (invoice: any) => (isSupplier ? invoice.supplier?.name : invoice.customer?.name);
 
   const totals = rows.reduce(
@@ -489,7 +492,7 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
                 </TableCell>
               </TableRow>
             )}
-            {rows.map((invoice: any) => {
+            {rows.slice((page - 1) * pageSize, page * pageSize).map((invoice: any) => {
               const outstanding = Math.max(0, Number(invoice.total) - Number(invoice.amountPaid));
               return (
                 <TableRow key={invoice.id}>
@@ -531,6 +534,15 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={Math.max(1, Math.ceil(rows.length / pageSize))}
+        pageSize={pageSize}
+        total={rows.length}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
     </div>
   );
 }
@@ -540,6 +552,8 @@ function PaymentsTab() {
   const { data, isLoading } = usePayments();
   const qc = useQueryClient();
   const payments = data?.payments ?? [];
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const { mutate: reverse, isPending: reversing } = useMutation({
     mutationFn: (id: string) => fetch(`/api/payments?id=${encodeURIComponent(id)}`, { method: "DELETE" }),
@@ -585,7 +599,7 @@ function PaymentsTab() {
                 </TableCell>
               </TableRow>
             )}
-            {payments.map((payment: any) => {
+            {payments.slice((page - 1) * pageSize, page * pageSize).map((payment: any) => {
               const invoice = payment.supplierInvoice ?? payment.customerInvoice;
               return (
                 <TableRow key={payment.id}>
@@ -619,6 +633,15 @@ function PaymentsTab() {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={Math.max(1, Math.ceil(payments.length / pageSize))}
+        pageSize={pageSize}
+        total={payments.length}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
     </div>
   );
 }

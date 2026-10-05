@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -186,6 +187,8 @@ onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.s
 function OrdersTab() {
   const { t } = useI18n();
   const { data, isLoading } = useSalesOrders();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const qc = useQueryClient();
   const { mutate: advance } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -211,7 +214,7 @@ function OrdersTab() {
             {!isLoading && data?.salesOrders.length === 0 && (
               <TableRow><TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-6 w-6" /> {t.orders.salesEmpty}</TableCell></TableRow>
             )}
-            {data?.salesOrders.map((so: any) => {
+            {(data?.salesOrders ?? []).slice((page - 1) * pageSize, page * pageSize).map((so: any) => {
               const total = so.lines.reduce((s: number, l: any) => s + l.quantity * Number(l.unitPrice), 0);
               const next = STATUS_FLOW[so.status];
               return (
@@ -231,6 +234,15 @@ function OrdersTab() {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={Math.max(1, Math.ceil((data?.salesOrders?.length ?? 0) / pageSize))}
+        pageSize={pageSize}
+        total={data?.salesOrders?.length ?? 0}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
     </div>
   );
 }

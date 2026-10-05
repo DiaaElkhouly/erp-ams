@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import { FileUpload } from "@/components/shared/file-upload";
 import { useI18n, type Locale } from "@/lib/i18n";
 
@@ -562,7 +563,11 @@ function SummaryRow({ label, value, strong = false }: { label: string; value: st
 
 function TestTable({ tests, loading, locale, emptyText }: { tests: any[]; loading: boolean; locale: Locale; emptyText: string }) {
   const { t } = useI18n();
-  return <div className="overflow-x-auto">
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const pagedTests = tests.slice((page - 1) * pageSize, page * pageSize);
+  return <div className="space-y-3">
+  <div className="overflow-x-auto">
     <Table><TableHeader><TableRow>
       <TableHead>{t.common.date}</TableHead><TableHead>{t.lab.materialProduct}</TableHead>
       <TableHead>{t.lab.test}</TableHead><TableHead>{t.lab.result}</TableHead>
@@ -570,7 +575,7 @@ function TestTable({ tests, loading, locale, emptyText }: { tests: any[]; loadin
     </TableRow></TableHeader><TableBody>
       {loading && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">{t.lab.loadingResults}</TableCell></TableRow>}
       {!loading && tests.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}
-      {!loading && tests.map((test) => <TableRow key={test.id}>
+      {!loading && pagedTests.map((test) => <TableRow key={test.id}>
         <TableCell className="whitespace-nowrap">{new Date(test.testedAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-GB")}</TableCell>
         <TableCell>{test.material}</TableCell><TableCell>
           <div>{test.testName}</div>
@@ -589,5 +594,14 @@ function TestTable({ tests, loading, locale, emptyText }: { tests: any[]; loadin
         </Badge></TableCell>
       </TableRow>)}
     </TableBody></Table>
+  </div>
+  <TablePagination
+    page={page}
+    pageCount={Math.max(1, Math.ceil(tests.length / pageSize))}
+    pageSize={pageSize}
+    total={tests.length}
+    onPageChange={setPage}
+    onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+  />
   </div>;
 }

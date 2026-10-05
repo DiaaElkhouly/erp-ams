@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Search, LogOut, User as UserIcon, Languages } from "lucide-react";
+import { Search, LogOut, User as UserIcon, Languages, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { NotificationBell } from "@/components/shared/notification-bell";
@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CommandPalette } from "./command-palette";
 import { MobileNav } from "./mobile-nav";
 import { useI18n } from "@/lib/i18n";
+import { useSidebarStore } from "@/lib/sidebar-store";
 import type { Role } from "@prisma/client";
 
 function initials(name: string) {
@@ -25,6 +26,7 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
   const pathname = usePathname();
   const { locale, setLocale, t } = useI18n();
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const toggleSidebar = useSidebarStore((s) => s.toggle);
 
   const crumb = pathname.split("/").filter(Boolean);
   const crumbLabels: Record<string, string> = {
@@ -43,9 +45,18 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
   };
 
   return (
-    <header className="flex h-14 items-center justify-between gap-2 border-b bg-card px-3 sm:gap-4 sm:px-4 print:hidden">
+    <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-3 sm:gap-4 sm:px-4 print:hidden">
       <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground sm:gap-3">
         <MobileNav role={role} />
+        <Button
+          variant="outline"
+          size="sm"
+          className="hidden px-2 md:flex"
+          onClick={toggleSidebar}
+          aria-label="Toggle sidebar"
+        >
+          <PanelLeft className="h-3.5 w-3.5" />
+        </Button>
         <span className="hidden shrink-0 sm:inline">{t.home}</span>
         {crumb.map((c, i) => (
           <span key={i} className="flex min-w-0 items-center gap-2 sm:gap-3">

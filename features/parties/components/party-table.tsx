@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCreateParty, useDeleteParty, usePartiesList, useUpdateParty } from "../hooks/use-parties";
@@ -104,9 +105,13 @@ export function PartyTable({ kind }: { kind: PartyKind }) {
   const { mutate: remove } = useDeleteParty(kind);
   const [editing, setEditing] = useState<Party | null>(null);
   const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const rows = data?.[kind] ?? [];
   const isCustomer = kind === "customers";
+  const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pagedRows = rows.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="space-y-4">
@@ -143,7 +148,7 @@ export function PartyTable({ kind }: { kind: PartyKind }) {
               </TableRow>
             )}
 
-            {rows.map((party) => (
+            {pagedRows.map((party) => (
               <TableRow key={party.id}>
                 <TableCell className="font-medium">{party.name}</TableCell>
                 <TableCell>{party.email || "—"}</TableCell>
@@ -164,6 +169,15 @@ export function PartyTable({ kind }: { kind: PartyKind }) {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={pageCount}
+        pageSize={pageSize}
+        total={rows.length}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
 
       <PartyFormDialog kind={kind} party={editing} open={editing !== null} onOpenChange={(open) => !open && setEditing(null)} />
       <PartyFormDialog kind={kind} party={null} open={creating} onOpenChange={setCreating} />

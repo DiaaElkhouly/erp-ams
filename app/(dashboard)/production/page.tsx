@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
@@ -101,6 +102,8 @@ function NewWorkOrderDialog() {
 export default function ProductionPage() {
   const { t } = useI18n();
   const { data, isLoading } = useWorkOrders();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const qc = useQueryClient();
   const { mutate: advance } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
@@ -147,7 +150,7 @@ export default function ProductionPage() {
                 <Factory className="mx-auto mb-2 h-6 w-6" /> {t.production.empty}
               </TableCell></TableRow>
             )}
-            {data?.workOrders.map((wo: any) => {
+            {(data?.workOrders ?? []).slice((page - 1) * pageSize, page * pageSize).map((wo: any) => {
               const next = STATUS_FLOW[wo.status];
               return (
                 <TableRow key={wo.id}>
@@ -173,6 +176,15 @@ export default function ProductionPage() {
           </TableBody>
         </Table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageCount={Math.max(1, Math.ceil((data?.workOrders?.length ?? 0) / pageSize))}
+        pageSize={pageSize}
+        total={data?.workOrders?.length ?? 0}
+        onPageChange={setPage}
+        onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+      />
     </div>
   );
 }

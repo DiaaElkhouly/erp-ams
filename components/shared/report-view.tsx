@@ -2,7 +2,9 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import { KpiCard, type KpiIcon } from "@/components/shared/kpi-card";
 import { ReportSectionExportButtons } from "@/components/shared/report-export-buttons";
 import { formatDelta, formatNumber } from "@/lib/utils";
@@ -55,6 +57,10 @@ export function ReportMetricsStrip({ metrics }: { metrics: ReportMetric[] }) {
 
 export function ReportSectionCard({ section }: { section: ReportSection }) {
   const { t, locale } = useI18n();
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const pageCount = Math.max(1, Math.ceil(section.rows.length / pageSize));
+  const pagedRows = section.rows.slice((page - 1) * pageSize, page * pageSize);
   return (
     <Card data-print-section={section.id} className="print:break-inside-avoid print:shadow-none">
       <CardHeader className="print:pb-2">
@@ -93,7 +99,7 @@ export function ReportSectionCard({ section }: { section: ReportSection }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {section.rows.map((row, rowIndex) => (
+                {pagedRows.map((row, rowIndex) => (
                   <TableRow
                     key={`${section.id}-${rowIndex}`}
                     className="print:bg-white print:even:bg-slate-100"
@@ -107,6 +113,18 @@ export function ReportSectionCard({ section }: { section: ReportSection }) {
                 ))}
               </TableBody>
             </Table>
+          </div>
+        )}
+        {section.rows.length > 0 && (
+          <div className="pt-3">
+            <TablePagination
+              page={page}
+              pageCount={pageCount}
+              pageSize={pageSize}
+              total={section.rows.length}
+              onPageChange={setPage}
+              onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+            />
           </div>
         )}
       </CardContent>

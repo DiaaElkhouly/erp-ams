@@ -48,7 +48,7 @@ export function SortableHead<TData>({
         onClick={column.getToggleSortingHandler()}
         title={t.common.sortBy.replace("{column}", label)}
         className={cn(
-          "flex h-10 w-full items-center gap-1 px-3 transition-colors hover:text-foreground",
+          "flex h-10 w-full items-center gap-1 px-2 transition-colors hover:text-foreground",
           align === "end" && "justify-end",
           align === "center" && "justify-center",
           !sorted && "text-muted-foreground"

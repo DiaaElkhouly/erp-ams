@@ -1,16 +1,16 @@
 import {
-  Package, Factory, ShoppingCart, Truck, Wallet, TrendingUp, Percent,
-  Receipt, Users, Coins, Boxes, AlertTriangle, FlaskConical,
+  Factory, ShoppingCart, Truck, Wallet, TrendingUp, Percent,
+  Receipt, Coins, Boxes, AlertTriangle, FlaskConical,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   CashFlowChart, InventoryByTypeChart, MarginTrendChart, OutputVsSalesChart,
   ProfitMarginGauge, ProfitabilityTrendChart, PurchaseShareChart, SalesShareByCustomerChart,
   SalesShareByProductChart, WorkOrderStatusChart,
 } from "@/components/shared/dashboard-charts";
+import { CustomersTable, InventoryTable, ProductsTable, SuppliersTable } from "@/components/shared/dashboard-tables";
 import { DateRangeFilter } from "@/components/shared/date-range-filter";
 import { KpiCard, type KpiCardProps } from "@/components/shared/kpi-card";
 import { OfflineBanner } from "@/components/shared/offline-banner";
@@ -215,48 +215,7 @@ export default async function DashboardPage({
               {t.dashboard.noSalesInRange}
             </p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t.common.item}</TableHead>
-                    <TableHead>{t.dashboard.units}</TableHead>
-                    <TableHead>{t.common.revenue}</TableHead>
-                    <TableHead>{t.common.cost}</TableHead>
-                    <TableHead>{t.dashboard.profit}</TableHead>
-                    <TableHead>{t.dashboard.margin}</TableHead>
-                    <TableHead>{t.dashboard.revenueShare}</TableHead>
-                    <TableHead>{t.dashboard.avgSellingPrice}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {metrics.products.map((product) => (
-                    <TableRow key={product.sku}>
-                      <TableCell>
-                        <div className="font-medium">{product.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{product.sku}</div>
-                      </TableCell>
-                      <TableCell className="tabular-nums">{formatNumber(product.unitsSold, 0)} {product.unit}</TableCell>
-                      <TableCell className="tabular-nums font-medium">{money(product.revenue)}</TableCell>
-                      <TableCell className="tabular-nums text-muted-foreground">{money(product.cogs)}</TableCell>
-                      <TableCell className={cnProfit(product.profit)}>{money(product.profit)}</TableCell>
-                      <TableCell>
-                        <MarginBadge value={product.marginPct} />
-                      </TableCell>
-                      <TableCell className="tabular-nums">
-                        <div className="flex items-center gap-2">
-                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                            <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, product.revenueSharePct)}%` }} />
-                          </div>
-                          <span className="tabular-nums text-xs">{formatPercent(product.revenueSharePct)}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="tabular-nums">{money(product.avgSellingPrice)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            <ProductsTable products={metrics.products} />
           )}
         </CardContent>
       </Card>
@@ -271,37 +230,7 @@ export default async function DashboardPage({
           {metrics.customers.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.noCustomersInRange}</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t.common.customer}</TableHead>
-                    <TableHead>{t.dashboard.orders}</TableHead>
-                    <TableHead>{t.common.revenue}</TableHead>
-                    <TableHead>{t.dashboard.profit}</TableHead>
-                    <TableHead>{t.dashboard.margin}</TableHead>
-                    <TableHead>{t.common.share}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                  <TableBody>
-                    {metrics.customers.map((customer) => (
-                      <TableRow key={customer.name}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-2">
-                            <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                            {customer.name}
-                          </div>
-                        </TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(customer.orderCount, 0)}</TableCell>
-                        <TableCell className="tabular-nums">{money(customer.revenue)}</TableCell>
-                        <TableCell className={cnProfit(customer.profit)}>{money(customer.profit)}</TableCell>
-                        <TableCell><MarginBadge value={customer.marginPct} /></TableCell>
-                        <TableCell className="tabular-nums">{formatPercent(customer.revenueSharePct)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+            <CustomersTable customers={metrics.customers} />
             )}
           </CardContent>
         </Card>
@@ -315,28 +244,7 @@ export default async function DashboardPage({
           {metrics.suppliers.length === 0 ? (
             <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.noPurchasesInRange}</p>
           ) : (
-            <div className="overflow-x-auto rounded-lg border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>{t.common.supplier}</TableHead>
-                    <TableHead>{t.dashboard.orders}</TableHead>
-                    <TableHead>{t.dashboard.purchasesValue}</TableHead>
-                    <TableHead>{t.common.share}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                  <TableBody>
-                    {metrics.suppliers.map((supplier) => (
-                      <TableRow key={supplier.name}>
-                        <TableCell className="font-medium">{supplier.name}</TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(supplier.orderCount, 0)}</TableCell>
-                        <TableCell className="tabular-nums">{money(supplier.purchases)}</TableCell>
-                        <TableCell className="tabular-nums">{formatPercent(supplier.sharePct)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+            <SuppliersTable suppliers={metrics.suppliers} />
             )}
           </CardContent>
         </Card>
@@ -383,36 +291,7 @@ export default async function DashboardPage({
           <CardDescription>{t.dashboard.topInventoryHint}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t.common.item}</TableHead>
-                  <TableHead>{t.dashboard.inventoryQty}</TableHead>
-                  <TableHead>{t.dashboard.inventoryValue}</TableHead>
-                  <TableHead>{t.dashboard.inventoryShare}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {metrics.inventory.topByValue.map((row) => (
-                  <TableRow key={row.sku}>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Package className="h-3.5 w-3.5 text-muted-foreground" />
-                        <div>
-                          <div className="font-medium">{row.name}</div>
-                          <div className="font-mono text-xs text-muted-foreground">{row.sku}</div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="tabular-nums">{formatNumber(row.qty, 0)}</TableCell>
-                    <TableCell className="tabular-nums font-medium">{money(row.value)}</TableCell>
-                    <TableCell className="tabular-nums">{formatPercent(row.sharePct)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          <InventoryTable rows={metrics.inventory.topByValue} />
         </CardContent>
       </Card>
     </div>
@@ -426,15 +305,4 @@ function SectionHeading({ title, description }: { title: string; description: st
       <p className="text-xs text-muted-foreground">{description}</p>
     </div>
   );
-}
-
-function cnProfit(value: number) {
-  return `tabular-nums font-medium ${value < 0 ? "text-red-600 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`;
-}
-
-function MarginBadge({ value }: { value: number }) {
-  if (value >= 25) return <Badge variant="success">{formatPercent(value)}</Badge>;
-  if (value >= 10) return <Badge variant="warning">{formatPercent(value)}</Badge>;
-  if (value < 0) return <Badge variant="destructive">{formatPercent(value)}</Badge>;
-  return <Badge variant="secondary">{formatPercent(value)}</Badge>;
 }

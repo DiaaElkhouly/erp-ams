@@ -5,16 +5,41 @@ import {
   PieChart, Pie, Cell, LineChart, Line, AreaChart, Area, ComposedChart, ReferenceLine,
   RadialBarChart, RadialBar, PolarAngleAxis,
 } from "recharts";
+import { useTheme } from "next-themes";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { DEFAULT_CURRENCY, formatCompact, formatMoney, formatPercent } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
-const COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
-const REVENUE_COLOR = "#2563eb";
-const COGS_COLOR = "#f59e0b";
-const PROFIT_COLOR = "#16a34a";
-const OUTFLOW_COLOR = "#dc2626";
-const CASH_COLOR = "#0891b2";
+/**
+ * Series colors, keyed by theme.
+ *
+ * Recharts writes colors into SVG `fill`/`stroke` *attributes*, and those do
+ * not resolve CSS variables — `var()` substitution only applies to CSS
+ * properties, not presentation attributes. So these cannot be
+ * `hsl(var(--chart-1))` the way the rest of the app is themed; they are literal
+ * values that mirror the `--chart-*` tokens in globals.css. Both themes are
+ * listed because the chart palette is not a near-black inversion of itself:
+ * `--chart-3` is #104e64 in light and #f69e00 in dark, so picking the wrong
+ * one produces a near-invisible series.
+ *
+ * Changing a `--chart-*` token means changing it here too.
+ */
+const CHART = {
+  light: {
+    1: "#ec5600", 2: "#009488", 3: "#104e64", 4: "#fabc00", 5: "#f69e00",
+    destructive: "#e40016", grid: "#e2e8f0", track: "rgba(148,163,184,0.25)",
+  },
+  dark: {
+    1: "#1447e6", 2: "#00b981", 3: "#f69e00", 4: "#ab4eff", 5: "#ff2357",
+    destructive: "#ff6568", grid: "#1b1f2f", track: "rgba(148,163,184,0.25)",
+  },
+} as const;
+
+/** Chart palette for the active theme. Falls back to light before mount. */
+function useChartPalette() {
+  const { resolvedTheme } = useTheme();
+  return resolvedTheme === "dark" ? CHART.dark : CHART.light;
+}
 
 const AXIS_FONT = { fontSize: 11 };
 
@@ -42,6 +67,8 @@ function EmptyState({ message }: { message: string }) {
 
 export function WorkOrderStatusChart({ data }: { data: { status: string; count: number }[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
+  const colors = [palette[1], palette[2], palette[3], palette[4], palette[5]];
   return (
     <Card>
       <CardHeader>
@@ -53,7 +80,7 @@ export function WorkOrderStatusChart({ data }: { data: { status: string; count: 
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={data} dataKey="count" nameKey="status" innerRadius={50} outerRadius={80} paddingAngle={2}>
-                {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
               </Pie>
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -67,6 +94,7 @@ export function WorkOrderStatusChart({ data }: { data: { status: string; count: 
 
 export function InventoryByTypeChart({ data }: { data: { type: string; qty: number }[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   return (
     <Card>
       <CardHeader>
@@ -80,7 +108,7 @@ export function InventoryByTypeChart({ data }: { data: { type: string; qty: numb
             <XAxis dataKey="type" tick={AXIS_FONT} />
             <YAxis tick={AXIS_FONT} />
             <Tooltip />
-            <Bar dataKey="qty" name={t.charts.units} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="qty" name={t.charts.units} fill={palette[1]} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
@@ -105,6 +133,7 @@ export type FinancialTrendPoint = {
 /** Revenue vs cost of goods vs gross profit across the selected buckets. */
 export function ProfitabilityTrendChart({ data }: { data: FinancialTrendPoint[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   return (
     <Card>
       <CardHeader>
@@ -120,9 +149,9 @@ export function ProfitabilityTrendChart({ data }: { data: FinancialTrendPoint[] 
               <YAxis yAxisId="money" {...moneyAxis()} />
               <Tooltip {...moneyTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="money" dataKey="revenue" name={t.charts.revenue} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={26} />
-              <Bar yAxisId="money" dataKey="cogs" name={t.charts.cogs} fill={COGS_COLOR} radius={[4, 4, 0, 0]} maxBarSize={26} />
-              <Line yAxisId="money" type="monotone" dataKey="profit" name={t.charts.grossProfit} stroke={PROFIT_COLOR} strokeWidth={2} dot={false} />
+              <Bar yAxisId="money" dataKey="revenue" name={t.charts.revenue} fill={palette[1]} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Bar yAxisId="money" dataKey="cogs" name={t.charts.cogs} fill={palette[5]} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Line yAxisId="money" type="monotone" dataKey="profit" name={t.charts.grossProfit} stroke={palette[2]} strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -133,6 +162,7 @@ export function ProfitabilityTrendChart({ data }: { data: FinancialTrendPoint[] 
 
 export function MarginTrendChart({ data, target }: { data: FinancialTrendPoint[]; target: number }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   return (
     <Card>
       <CardHeader>
@@ -147,8 +177,8 @@ export function MarginTrendChart({ data, target }: { data: FinancialTrendPoint[]
               <XAxis dataKey="label" tick={AXIS_FONT} interval="preserveStartEnd" />
               <YAxis tick={AXIS_FONT} tickFormatter={(value: number) => `${formatCompact(value)}%`} unit="%" />
               <Tooltip {...percentTooltip} />
-              <ReferenceLine y={target} stroke="#7c3aed" strokeDasharray="4 4" label={{ value: t.charts.average(formatPercent(target)), fontSize: 10, position: "insideTopRight" }} />
-              <Area type="monotone" dataKey="marginPct" name={t.charts.margin} stroke={PROFIT_COLOR} strokeWidth={2} fill={PROFIT_COLOR} fillOpacity={0.15} />
+              <ReferenceLine y={target} stroke={palette[4]} strokeDasharray="4 4" label={{ value: t.charts.average(formatPercent(target)), fontSize: 10, position: "insideTopRight" }} />
+              <Area type="monotone" dataKey="marginPct" name={t.charts.margin} stroke={palette[2]} strokeWidth={2} fill={palette[2]} fillOpacity={0.15} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -160,6 +190,7 @@ export function MarginTrendChart({ data, target }: { data: FinancialTrendPoint[]
 /** Cash in (sales) vs cash out (purchases) and the resulting net position. */
 export function CashFlowChart({ data }: { data: FinancialTrendPoint[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   return (
     <Card>
       <CardHeader>
@@ -173,12 +204,12 @@ export function CashFlowChart({ data }: { data: FinancialTrendPoint[] }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
               <XAxis dataKey="label" tick={AXIS_FONT} interval="preserveStartEnd" />
               <YAxis {...moneyAxis()} />
-              <ReferenceLine y={0} stroke="#94a3b8" />
+              <ReferenceLine y={0} stroke={palette.grid} />
               <Tooltip {...moneyTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId={0} dataKey="revenue" name={t.charts.cashIn} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Bar yAxisId={0} dataKey="purchases" name={t.charts.cashOut} fill={OUTFLOW_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Line yAxisId={0} type="monotone" dataKey="cashFlow" name={t.charts.netCashFlow} stroke={CASH_COLOR} strokeWidth={2} dot={false} />
+              <Bar yAxisId={0} dataKey="revenue" name={t.charts.cashIn} fill={palette[1]} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Bar yAxisId={0} dataKey="purchases" name={t.charts.cashOut} fill={palette.destructive} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Line yAxisId={0} type="monotone" dataKey="cashFlow" name={t.charts.netCashFlow} stroke={palette[3]} strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -189,6 +220,7 @@ export function CashFlowChart({ data }: { data: FinancialTrendPoint[] }) {
 
 export function SalesVsPurchaseTrendChart({ data }: { data: FinancialTrendPoint[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   return (
     <Card>
       <CardHeader>
@@ -203,8 +235,8 @@ export function SalesVsPurchaseTrendChart({ data }: { data: FinancialTrendPoint[
             <YAxis tick={AXIS_FONT} />
             <Tooltip />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Line type="monotone" dataKey="salesOrders" name={t.charts.salesOrders} stroke={PROFIT_COLOR} strokeWidth={2} />
-            <Line type="monotone" dataKey="purchases" name={t.charts.purchaseValue} stroke={COGS_COLOR} strokeWidth={2} />
+            <Line type="monotone" dataKey="salesOrders" name={t.charts.salesOrders} stroke={palette[2]} strokeWidth={2} />
+            <Line type="monotone" dataKey="purchases" name={t.charts.purchaseValue} stroke={palette[5]} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       </CardContent>
@@ -215,6 +247,7 @@ export function SalesVsPurchaseTrendChart({ data }: { data: FinancialTrendPoint[
 /** Horizontal share-of-revenue bars, the clearest way to read a percentage split. */
 export function SalesShareByProductChart({ data }: { data: { name: string; share: number; revenue: number; units: number }[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   const rows = data.map((row) => ({ ...row, shareLabel: formatPercent(row.share) }));
 
   return (
@@ -238,7 +271,7 @@ export function SalesShareByProductChart({ data }: { data: { name: string; share
                 labelFormatter={(label) => String(label)}
               />
               <Bar dataKey="share" radius={[0, 4, 4, 0]} maxBarSize={22}>
-                {rows.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                {rows.map((_, i) => <Cell key={i} fill={[palette[1], palette[2], palette[3], palette[4], palette[5]][i % 5]} />)}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -250,6 +283,8 @@ export function SalesShareByProductChart({ data }: { data: { name: string; share
 
 export function SalesShareByCustomerChart({ data }: { data: { name: string; share: number; revenue: number; profit: number }[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
+  const colors = [palette[1], palette[2], palette[3], palette[4], palette[5]];
   return (
     <Card>
       <CardHeader>
@@ -270,7 +305,7 @@ export function SalesShareByCustomerChart({ data }: { data: { name: string; shar
                 label={({ percent }: { percent?: number }) => formatPercent((percent ?? 0) * 100, 0)}
                 labelLine={false}
               >
-                {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                {data.map((_, i) => <Cell key={i} fill={colors[i % colors.length]} />)}
               </Pie>
               <Tooltip formatter={(value: unknown) => formatMoney(Number(value), DEFAULT_CURRENCY)} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -284,6 +319,7 @@ export function SalesShareByCustomerChart({ data }: { data: { name: string; shar
 
 export function ProfitMarginGauge({ marginPct, profit, revenue }: { marginPct: number; profit: number; revenue: number }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   const clamped = Math.max(0, Math.min(100, marginPct));
   const data = [{ name: t.charts.margin, value: clamped }];
 
@@ -297,14 +333,14 @@ export function ProfitMarginGauge({ marginPct, profit, revenue }: { marginPct: n
         <ResponsiveContainer width="100%" height="100%">
           <RadialBarChart innerRadius="60%" outerRadius="95%" startAngle={210} endAngle={-30} barSize={18} data={data}>
             <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
-            <RadialBar dataKey="value" cornerRadius={8} background={{ fill: "rgba(148,163,184,0.25)" }} fill={PROFIT_COLOR} />
+            <RadialBar dataKey="value" cornerRadius={8} background={{ fill: "rgba(148,163,184,0.25)" }} fill={palette[2]} />
             <Tooltip formatter={() => [formatPercent(marginPct), t.charts.margin]} />
           </RadialBarChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pt-6">
           <span className="tabular-nums text-3xl font-semibold">{formatPercent(marginPct)}</span>
           <span className="text-xs text-muted-foreground">{t.charts.of(formatMoney(revenue, DEFAULT_CURRENCY))}</span>
-          <span className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="mt-1 text-xs font-medium text-success">
             {t.charts.profitOf(formatMoney(profit, DEFAULT_CURRENCY))}
           </span>
         </div>
@@ -316,6 +352,7 @@ export function ProfitMarginGauge({ marginPct, profit, revenue }: { marginPct: n
 /** Cost structure of the period: purchase value split by supplier. */
 export function PurchaseShareChart({ data }: { data: { name: string; purchases: number; sharePct: number }[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   const rows = data.map((row) => ({ ...row, label: `${row.name}` }));
 
   return (
@@ -333,7 +370,7 @@ export function PurchaseShareChart({ data }: { data: { name: string; purchases: 
               <YAxis {...moneyAxis()} />
               <Tooltip {...moneyTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="purchases" name={t.charts.purchaseValue} fill={OUTFLOW_COLOR} radius={[4, 4, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="purchases" name={t.charts.purchaseValue} fill={palette.destructive} radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -345,6 +382,7 @@ export function PurchaseShareChart({ data }: { data: { name: string; purchases: 
 /** Units produced vs units sold in the same bucket — the operational half of the story. */
 export function OutputVsSalesChart({ data }: { data: FinancialTrendPoint[] }) {
   const { t } = useI18n();
+  const palette = useChartPalette();
   return (
     <Card>
       <CardHeader>
@@ -360,8 +398,8 @@ export function OutputVsSalesChart({ data }: { data: FinancialTrendPoint[] }) {
               <YAxis tick={AXIS_FONT} tickFormatter={(value: number) => formatCompact(value)} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="productionQty" name={t.charts.completedOutput} fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Bar dataKey="unitsSold" name={t.charts.unitsSold} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Bar dataKey="productionQty" name={t.charts.completedOutput} fill={palette[4]} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Bar dataKey="unitsSold" name={t.charts.unitsSold} fill={palette[1]} radius={[4, 4, 0, 0]} maxBarSize={24} />
             </BarChart>
           </ResponsiveContainer>
         )}

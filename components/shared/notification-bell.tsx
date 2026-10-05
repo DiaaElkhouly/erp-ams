@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 const SEVERITY_DOT: Record<string, string> = {
   INFO: "bg-muted-foreground",
-  WARNING: "bg-amber-500",
+  WARNING: "bg-warning",
   CRITICAL: "bg-destructive",
 };
 

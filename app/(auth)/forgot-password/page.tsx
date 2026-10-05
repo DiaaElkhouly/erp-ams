@@ -33,7 +33,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <Card className="w-full max-w-md border-border/60 bg-card/85 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:shadow-black/40">
+    <Card className="w-full max-w-md border-border/60 bg-card/85 shadow-2xl shadow-black/10 backdrop-blur-xl dark:shadow-black/40">
       <CardHeader>
         <CardTitle className="text-xl">{t.auth.forgotTitle}</CardTitle>
         <CardDescription>{t.auth.forgotSubtitle}</CardDescription>

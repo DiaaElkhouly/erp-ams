@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { TablePagination } from "@/components/shared/data-table";
 import { OfflineBanner } from "@/components/shared/offline-banner";
 import { formatDate } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -56,6 +57,8 @@ export default function MrpPage() {
 
   const latest = data?.runs?.[0];
   const latestId = latest?.id;
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   /** A line already turned into a PO is marked in the table and not re-offered. */
   const ungenerated = (latest?.lines ?? []).filter((line: any) => !line.purchaseOrderId);
 
@@ -111,7 +114,7 @@ export default function MrpPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {latest.lines.map((line: any) => (
+                  {latest.lines.slice((page - 1) * pageSize, page * pageSize).map((line: any) => (
                     <TableRow key={line.id}>
                       <TableCell className="font-medium">
                         {line.item.name} <span className="text-xs text-muted-foreground">({line.item.sku})</span>
@@ -137,6 +140,18 @@ export default function MrpPage() {
                   ))}
                 </TableBody>
               </Table>
+            )}
+            {latest.lines.length > 0 && (
+              <div className="pt-3">
+                <TablePagination
+                  page={page}
+                  pageCount={Math.max(1, Math.ceil(latest.lines.length / pageSize))}
+                  pageSize={pageSize}
+                  total={latest.lines.length}
+                  onPageChange={setPage}
+                  onPageSizeChange={(size) => { setPageSize(size); setPage(1); }}
+                />
+              </div>
             )}
           </CardContent>
         </Card>
