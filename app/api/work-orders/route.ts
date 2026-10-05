@@ -65,19 +65,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const workOrder = await db.workOrder.create({
-      data: {
-        orderNumber: generateOrderNumber("WO"),
-        bomId: bom.id,
-        itemId: resolved.itemId,
-        warehouseId: body.warehouseId,
-        quantity: body.quantity,
-        dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
-        createdById: session!.user.id,
-      },
-      include: { bom: { include: { finishedItem: true } }, item: true, warehouse: true },
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "WORK_ORDER", (data: any) => data?.id, async () => {
+      const workOrder = await db.workOrder.create({
+        data: {
+          orderNumber: generateOrderNumber("WO"),
+          bomId: bom.id,
+          itemId: resolved.itemId,
+          warehouseId: body.warehouseId,
+          quantity: body.quantity,
+          dueDate: body.dueDate ? new Date(body.dueDate) : undefined,
+          createdById: session!.user.id,
+        },
+        include: { bom: { include: { finishedItem: true } }, item: true, warehouse: true },
+      });
+      return { data: workOrder, status: 201 };
     });
-    return NextResponse.json(workOrder, { status: 201 });
   } catch (err) {
     return handleApiError(err);
   }

@@ -28,16 +28,19 @@ export async function POST(req: NextRequest) {
   if (error) return error;
   try {
     const body = schema.parse(await req.json());
-    const purchaseOrder = await db.purchaseOrder.create({
-      data: {
-        orderNumber: generateOrderNumber("PO"),
-        supplierId: body.supplierId,
-        createdById: session!.user.id,
-        lines: { create: body.lines },
-      },
-      include: { supplier: true, lines: { include: { item: true } } },
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "PURCHASE_ORDER", (data: any) => data?.id, async () => {
+      const purchaseOrder = await db.purchaseOrder.create({
+        data: {
+          orderNumber: generateOrderNumber("PO"),
+          supplierId: body.supplierId,
+          createdById: session!.user.id,
+          lines: { create: body.lines },
+        },
+        include: { supplier: true, lines: { include: { item: true } } },
+      });
+      return { data: purchaseOrder, status: 201 };
     });
-    return NextResponse.json(purchaseOrder, { status: 201 });
   } catch (err) {
     return handleApiError(err);
   }

@@ -51,24 +51,27 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    if (body.kind === "test") {
-      const { kind: _kind, ...data } = testSchema.parse(body);
-      const record = await db.labTestRecord.create({
-        data: { ...data, details: data.details ? data.details as Prisma.InputJsonValue : Prisma.DbNull },
-      });
-      return NextResponse.json(record, { status: 201 });
-    }
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "LAB_RECORD", (data: any) => data?.id, async () => {
+      if (body.kind === "test") {
+        const { kind: _kind, ...data } = testSchema.parse(body);
+        const record = await db.labTestRecord.create({
+          data: { ...data, details: data.details ? data.details as Prisma.InputJsonValue : Prisma.DbNull },
+        });
+        return { data: record, status: 201 };
+      }
 
-    const { kind: _kind, ...data } = mixSchema.parse(body);
-    const design = await db.labMixDesign.create({
-      data: {
-        ...data,
-        recipe: data.recipe as Prisma.InputJsonValue,
-        corrections: data.corrections as Prisma.InputJsonValue,
-        metrics: data.metrics as Prisma.InputJsonValue,
-      },
+      const { kind: _kind, ...data } = mixSchema.parse(body);
+      const design = await db.labMixDesign.create({
+        data: {
+          ...data,
+          recipe: data.recipe as Prisma.InputJsonValue,
+          corrections: data.corrections as Prisma.InputJsonValue,
+          metrics: data.metrics as Prisma.InputJsonValue,
+        },
+      });
+      return { data: design, status: 201 };
     });
-    return NextResponse.json(design, { status: 201 });
   } catch (err) {
     return handleApiError(err);
   }

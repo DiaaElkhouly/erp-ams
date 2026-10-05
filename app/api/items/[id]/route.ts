@@ -18,9 +18,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (error) return error;
   try {
     const { id } = await params;
-    const body = updateSchema.parse(await req.json());
-    const item = await db.item.update({ where: { id }, data: body });
-    return NextResponse.json(item);
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "UPDATE", "ITEM", (data: any) => data?.id ?? id, async () => {
+      const body = updateSchema.parse(await req.json());
+      const item = await db.item.update({ where: { id }, data: body });
+      return { data: item };
+    });
   } catch (err) {
     return handleApiError(err);
   }
@@ -31,8 +34,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (error) return error;
   try {
     const { id } = await params;
-    await db.item.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(_req, "DELETE", "ITEM", () => id, async () => {
+      await db.item.delete({ where: { id } });
+      return { data: { success: true } };
+    });
   } catch (err) {
     return handleApiError(err);
   }

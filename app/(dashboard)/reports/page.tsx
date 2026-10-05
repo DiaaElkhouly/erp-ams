@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { DateRangeFilter } from "@/components/shared/date-range-filter";
 import { ReportExportButtons } from "@/components/shared/report-export-buttons";
 import { ReportMetricsStrip, ReportSectionCard } from "@/components/shared/report-view";
+import { OfflineBanner } from "@/components/shared/offline-banner";
 import { Badge } from "@/components/ui/badge";
 import { DateRangeParams, resolveDateRange } from "@/lib/date-range";
 import { getEarliestRecordDate } from "@/lib/dashboard-metrics";
@@ -37,6 +38,7 @@ export default async function ReportsPage({
 
   return (
     <div className="space-y-6 print:pb-10">
+      <OfflineBanner />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">التقارير</h1>

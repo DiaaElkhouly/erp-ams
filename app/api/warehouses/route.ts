@@ -23,9 +23,12 @@ export async function POST(req: NextRequest) {
   const { error } = await requireModuleAccess("warehouse");
   if (error) return error;
   try {
-    const body = schema.parse(await req.json());
-    const warehouse = await db.warehouse.create({ data: body });
-    return NextResponse.json(warehouse, { status: 201 });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "WAREHOUSE", (data: any) => data?.id, async () => {
+      const body = schema.parse(await req.json());
+      const warehouse = await db.warehouse.create({ data: body });
+      return { data: warehouse, status: 201 };
+    });
   } catch (err) {
     return handleApiError(err);
   }

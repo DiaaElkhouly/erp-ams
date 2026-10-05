@@ -14,48 +14,51 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const { id } = await params;
     const body = statusSchema.parse(await req.json());
 
-    const order = await db.$transaction(async (tx) => {
-      const current = await tx.purchaseOrder.findUnique({
-        where: { id },
-        include: { lines: true },
-      });
-      if (!current) throw notFound("Purchase order not found");
-
-      // Receiving twice would book the same delivery into stock twice.
-      if (current.status === "RECEIVED") {
-        throw conflict(`Purchase order ${current.orderNumber} is already received and cannot change status`);
-      }
-
-      if (body.status !== "RECEIVED") {
-        return tx.purchaseOrder.update({
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "UPDATE", "PURCHASE_ORDER", (data: any) => data?.id ?? id, async () => {
+      const order = await db.$transaction(async (tx) => {
+        const current = await tx.purchaseOrder.findUnique({
           where: { id },
-          data: { status: body.status },
           include: { lines: true },
         });
-      }
+        if (!current) throw notFound("Purchase order not found");
 
-      // A purchase order names no warehouse, so stock lands in the agreed default bin.
-      const warehouseId = await defaultWarehouseId(tx);
-      const ref = { refType: "PURCHASE_ORDER", refId: current.id };
-      const receipts: StockMovementInput[] = current.lines.map((line) => ({
-        itemId: line.itemId,
-        warehouseId,
-        qtyDelta: line.quantity,
-        reason: "PURCHASE_RECEIPT",
-        ...ref,
-        note: `Received against purchase order ${current.orderNumber}`,
-      }));
+        // Receiving twice would book the same delivery into stock twice.
+        if (current.status === "RECEIVED") {
+          throw conflict(`Purchase order ${current.orderNumber} is already received and cannot change status`);
+        }
 
-      await applyMovements(tx, receipts);
+        if (body.status !== "RECEIVED") {
+          return tx.purchaseOrder.update({
+            where: { id },
+            data: { status: body.status },
+            include: { lines: true },
+          });
+        }
 
-      return tx.purchaseOrder.update({
-        where: { id },
-        data: { status: "RECEIVED" },
-        include: { lines: true },
+        // A purchase order names no warehouse, so stock lands in the agreed default bin.
+        const warehouseId = await defaultWarehouseId(tx);
+        const ref = { refType: "PURCHASE_ORDER", refId: current.id };
+        const receipts: StockMovementInput[] = current.lines.map((line) => ({
+          itemId: line.itemId,
+          warehouseId,
+          qtyDelta: line.quantity,
+          reason: "PURCHASE_RECEIPT",
+          ...ref,
+          note: `Received against purchase order ${current.orderNumber}`,
+        }));
+
+        await applyMovements(tx, receipts);
+
+        return tx.purchaseOrder.update({
+          where: { id },
+          data: { status: "RECEIVED" },
+          include: { lines: true },
+        });
       });
-    });
 
-    return NextResponse.json(order);
+      return { data: order };
+    });
   } catch (err) {
     return handleApiError(err);
   }
@@ -66,8 +69,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (error) return error;
   try {
     const { id } = await params;
-    await db.purchaseOrder.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(_req, "DELETE", "PURCHASE_ORDER", () => id, async () => {
+      await db.purchaseOrder.delete({ where: { id } });
+      return { data: { success: true } };
+    });
   } catch (err) {
     return handleApiError(err);
   }

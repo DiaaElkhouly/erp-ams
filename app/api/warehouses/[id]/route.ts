@@ -7,8 +7,11 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (error) return error;
   try {
     const { id } = await params;
-    await db.warehouse.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(_req, "DELETE", "WAREHOUSE", () => id, async () => {
+      await db.warehouse.delete({ where: { id } });
+      return { data: { success: true } };
+    });
   } catch (err) {
     return handleApiError(err);
   }

@@ -47,12 +47,15 @@ export async function POST(req: NextRequest) {
       })
       .filter((l) => l.suggestedQty > 0);
 
-    const run = await db.mrpRun.create({
-      data: { name: body.name, lines: { create: lines } },
-      include: { lines: { include: { item: true } } },
-    });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "MRP_RUN", (data: any) => data?.id, async () => {
+      const run = await db.mrpRun.create({
+        data: { name: body.name, lines: { create: lines } },
+        include: { lines: { include: { item: true } } },
+      });
 
-    return NextResponse.json(run, { status: 201 });
+      return { data: run, status: 201 };
+    });
   } catch (err) {
     return handleApiError(err);
   }

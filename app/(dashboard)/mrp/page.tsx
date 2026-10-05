@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { OfflineBanner } from "@/components/shared/offline-banner";
 import { formatDate } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 
@@ -33,6 +34,7 @@ export default function MrpPage() {
 
   return (
     <div className="space-y-6">
+      <OfflineBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{t.nav.mrp}</h1>

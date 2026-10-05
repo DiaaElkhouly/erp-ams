@@ -13,6 +13,7 @@ import {
 } from "@/components/shared/dashboard-charts";
 import { DateRangeFilter } from "@/components/shared/date-range-filter";
 import { KpiCard, type KpiCardProps } from "@/components/shared/kpi-card";
+import { OfflineBanner } from "@/components/shared/offline-banner";
 import { DateRangeParams, formatRangeLabel, resolveDateRange } from "@/lib/date-range";
 import { getDashboardMetrics, getEarliestRecordDate, getOperationalSnapshot } from "@/lib/dashboard-metrics";
 import { DEFAULT_CURRENCY, formatMoney, formatNumber, formatPercent } from "@/lib/utils";
@@ -144,6 +145,7 @@ export default async function DashboardPage({
 
   return (
     <div className="space-y-6">
+      <OfflineBanner />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">لوحة التحكم</h1>

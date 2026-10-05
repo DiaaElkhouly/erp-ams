@@ -25,16 +25,19 @@ export async function POST(req: NextRequest) {
   if (error) return error;
   try {
     const body = schema.parse(await req.json());
-    const bom = await db.bom.create({
-      data: {
-        name: body.name,
-        finishedItemId: body.finishedItemId,
-        version: body.version,
-        components: { create: body.components },
-      },
-      include: { finishedItem: true, components: { include: { item: true } } },
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "BOM", (data: any) => data?.id, async () => {
+      const bom = await db.bom.create({
+        data: {
+          name: body.name,
+          finishedItemId: body.finishedItemId,
+          version: body.version,
+          components: { create: body.components },
+        },
+        include: { finishedItem: true, components: { include: { item: true } } },
+      });
+      return { data: bom, status: 201 };
     });
-    return NextResponse.json(bom, { status: 201 });
   } catch (err) {
     return handleApiError(err);
   }

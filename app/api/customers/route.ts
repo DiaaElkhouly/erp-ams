@@ -21,9 +21,12 @@ export async function POST(req: NextRequest) {
   const { error } = await requireModuleAccess("sales");
   if (error) return error;
   try {
-    const body = schema.parse(await req.json());
-    const customer = await db.customer.create({ data: body });
-    return NextResponse.json(customer, { status: 201 });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "CUSTOMER", (data: any) => data?.id, async () => {
+      const body = schema.parse(await req.json());
+      const customer = await db.customer.create({ data: body });
+      return { data: customer, status: 201 };
+    });
   } catch (err) {
     return handleApiError(err);
   }

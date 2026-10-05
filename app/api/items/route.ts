@@ -54,9 +54,12 @@ export async function POST(req: NextRequest) {
   if (error) return error;
 
   try {
-    const body = itemSchema.parse(await req.json());
-    const item = await db.item.create({ data: body });
-    return NextResponse.json(item, { status: 201 });
+    const { withIdempotency } = await import("@/lib/idempotency");
+    return withIdempotency(req, "CREATE", "ITEM", (data: any) => data?.id, async () => {
+      const body = itemSchema.parse(await req.json());
+      const item = await db.item.create({ data: body });
+      return { data: item, status: 201 };
+    });
   } catch (err) {
     return handleApiError(err);
   }
