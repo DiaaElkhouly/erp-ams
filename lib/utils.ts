@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const DEFAULT_CURRENCY = "EGP";
-export const CURRENCY_LABEL: Record<string, string> = { EGP: "ج.م", USD: "$", EUR: "€" };
+/** ISO codes rather than the Arabic "ج.م", so money reads the same in both locales. */
+export const CURRENCY_LABEL: Record<string, string> = { EGP: "EGP", USD: "$", EUR: "€" };
 
 export function formatCurrency(value: number | string, currency = "USD") {
   const n = typeof value === "string" ? parseFloat(value) : value;

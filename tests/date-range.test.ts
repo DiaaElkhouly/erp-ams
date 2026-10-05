@@ -266,9 +266,10 @@ describe("bucketing", () => {
   });
 
   it("labels buckets per granularity", () => {
-    expect(bucketLabel(NOW, "day")).toBe("15 Mar");
-    expect(bucketLabel(NOW, "week")).toBe("أسبوع 15/3");
-    expect(bucketLabel(NOW, "month")).toBe("Mar 2026");
+    expect(bucketLabel(NOW, "day", { week: "Week" })).toBe("15 Mar");
+    expect(bucketLabel(NOW, "week", { week: "Week" })).toBe("Week 15/3");
+    expect(bucketLabel(NOW, "week", { week: "أسبوع" })).toBe("أسبوع 15/3");
+    expect(bucketLabel(NOW, "month", { week: "Week" })).toBe("Mar 2026");
   });
 
   it("emits one bucket per day across a 7-day range", () => {

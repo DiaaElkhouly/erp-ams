@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useI18n } from "@/lib/i18n";
 import { notificationService } from "../services/notification-service";
 
 export function useNotifications(take = 20) {
@@ -23,12 +24,13 @@ export function useSetNotificationRead() {
 }
 
 export function useReadAllNotifications() {
+  const { t } = useI18n();
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => notificationService.readAll(),
     onSuccess: ({ dismissed }) => {
       qc.invalidateQueries({ queryKey: ["notifications"] });
-      if (dismissed > 0) toast.success(`تم تعليم ${dismissed} إشعار كمقروء`);
+      if (dismissed > 0) toast.success(t.notifications.markedRead(dismissed));
     },
     onError: (e: Error) => toast.error(e.message),
   });

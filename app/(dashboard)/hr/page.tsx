@@ -16,19 +16,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatDate, formatPercent, formatTime } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 const EMPLOYEE_STATUS_VARIANT: Record<string, "secondary" | "default" | "destructive"> = {
   ACTIVE: "default", ON_LEAVE: "secondary", TERMINATED: "destructive",
 };
-const EMPLOYEE_STATUS_LABELS: Record<string, string> = {
-  ACTIVE: "على رأس العمل", ON_LEAVE: "في إجازة", TERMINATED: "منتهي الخدمة",
-};
 
 const ATTENDANCE_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
   PRESENT: "default", LATE: "secondary", ABSENT: "destructive", LEAVE: "secondary",
-};
-const ATTENDANCE_LABELS: Record<string, string> = {
-  PRESENT: "حاضر", LATE: "متأخر", ABSENT: "غائب", LEAVE: "إجازة",
 };
 
 /** YYYY-MM-DD in local time, which is what an `<input type="date">` hands back. */
@@ -51,6 +46,7 @@ function useAttendance(date: string, employeeId: string) {
 }
 
 function NewEmployeeDialog() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     employeeCode: "", firstName: "", lastName: "", email: "", phone: "",
@@ -65,12 +61,12 @@ function NewEmployeeDialog() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...form, hireDate: form.hireDate || undefined }),
       }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "تعذّر إضافة الموظف");
+        if (!r.ok) throw new Error((await r.json()).error ?? t.hr.addFailed);
         return r.json();
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["employees"] });
-      toast.success("تمت إضافة الموظف");
+      toast.success(t.hr.added);
       setOpen(false);
       setForm({ employeeCode: "", firstName: "", lastName: "", email: "", phone: "", department: "", position: "", hireDate: "" });
     },
@@ -81,48 +77,48 @@ function NewEmployeeDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> موظف جديد</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> {t.hr.newEmployee}</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>إضافة موظف</DialogTitle>
-          <DialogDescription>الرقم الوظيفي فريد ويُستخدم في سجل الحضور.</DialogDescription>
+          <DialogTitle>{t.hr.addEmployee}</DialogTitle>
+          <DialogDescription>{t.hr.codeHint}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="emp-code">الرقم الوظيفي</Label>
+            <Label htmlFor="emp-code">{t.hr.employeeCode}</Label>
             <Input id="emp-code" value={form.employeeCode} onChange={(e) => setForm({ ...form, employeeCode: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-hire">تاريخ التعيين</Label>
+            <Label htmlFor="emp-hire">{t.hr.hireDate}</Label>
             <Input id="emp-hire" type="date" value={form.hireDate} onChange={(e) => setForm({ ...form, hireDate: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-first">الاسم الأول</Label>
+            <Label htmlFor="emp-first">{t.hr.firstName}</Label>
             <Input id="emp-first" value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-last">اسم العائلة</Label>
+            <Label htmlFor="emp-last">{t.hr.lastName}</Label>
             <Input id="emp-last" value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-email">البريد الإلكتروني</Label>
+            <Label htmlFor="emp-email">{t.hr.email}</Label>
             <Input id="emp-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-phone">الهاتف</Label>
+            <Label htmlFor="emp-phone">{t.hr.phone}</Label>
             <Input id="emp-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-dept">القسم</Label>
-            <Input id="emp-dept" placeholder="مثال: الإنتاج" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+            <Label htmlFor="emp-dept">{t.hr.department}</Label>
+            <Input id="emp-dept" placeholder={t.hr.departmentPlaceholder} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="emp-position">المسمى الوظيفي</Label>
+            <Label htmlFor="emp-position">{t.hr.position}</Label>
             <Input id="emp-position" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
           </div>
         </div>
         <DialogFooter>
-          <Button disabled={isPending || !canSave} onClick={() => mutate()}>{isPending ? "جارٍ الحفظ..." : "حفظ"}</Button>
+          <Button disabled={isPending || !canSave} onClick={() => mutate()}>{isPending ? t.common.saving : t.common.save}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -130,6 +126,7 @@ function NewEmployeeDialog() {
 }
 
 function EmployeesTab() {
+  const { t } = useI18n();
   const { data, isLoading } = useEmployees();
   const qc = useQueryClient();
   const employees = data?.employees ?? [];
@@ -141,21 +138,25 @@ function EmployeesTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "تعذّر تحديث الموظف");
+        if (!r.ok) throw new Error((await r.json()).error ?? t.hr.updateFailed);
         return r.json();
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["employees"] });
-      toast.success("تم تحديث حالة الموظف");
+      toast.success(t.hr.statusUpdated);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const { mutate: remove } = useMutation({
-    mutationFn: (id: string) => fetch(`/api/employees/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      fetch(`/api/employees/${id}`, { method: "DELETE" }).then(async (r) => {
+        if (!r.ok) throw new Error((await r.json()).error ?? t.hr.deleteFailed);
+        return r.json();
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["employees"] });
-      toast.success("تم حذف سجل الموظف");
+      toast.success(t.hr.deleted);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -167,12 +168,12 @@ function EmployeesTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>الرقم</TableHead>
-              <TableHead>الاسم</TableHead>
-              <TableHead>القسم</TableHead>
-              <TableHead>المسمى</TableHead>
-              <TableHead>تاريخ التعيين</TableHead>
-              <TableHead>الحالة</TableHead>
+              <TableHead>{t.finance.number}</TableHead>
+              <TableHead>{t.hr.name}</TableHead>
+              <TableHead>{t.hr.department}</TableHead>
+              <TableHead>{t.hr.positionShort}</TableHead>
+              <TableHead>{t.hr.hireDate}</TableHead>
+              <TableHead>{t.common.status}</TableHead>
               <TableHead className="w-40" />
             </TableRow>
           </TableHeader>
@@ -183,7 +184,7 @@ function EmployeesTab() {
             {!isLoading && employees.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  <Users className="mx-auto mb-2 h-6 w-6" /> لا يوجد موظفون بعد.
+                  <Users className="mx-auto mb-2 h-6 w-6" /> {t.hr.empty}
                 </TableCell>
               </TableRow>
             )}
@@ -198,22 +199,22 @@ function EmployeesTab() {
                 <TableCell>{employee.position}</TableCell>
                 <TableCell>{employee.hireDate ? formatDate(employee.hireDate) : "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={EMPLOYEE_STATUS_VARIANT[employee.status]}>{EMPLOYEE_STATUS_LABELS[employee.status]}</Badge>
+                  <Badge variant={EMPLOYEE_STATUS_VARIANT[employee.status]}>{t.hr.employeeStatus[employee.status as keyof typeof t.hr.employeeStatus] ?? employee.status}</Badge>
                 </TableCell>
                 <TableCell className="flex gap-1">
                   {/* Leave and reactivation, not an edit form: the fields that make
                       someone an employee are set on the record, not toggled daily. */}
                   {employee.status === "ACTIVE" && (
                     <Button size="sm" variant="outline" disabled={updating} onClick={() => update({ id: employee.id, status: "ON_LEAVE" })}>
-                      إجازة
+                      {t.hr.onLeave}
                     </Button>
                   )}
                   {employee.status === "ON_LEAVE" && (
                     <Button size="sm" variant="outline" disabled={updating} onClick={() => update({ id: employee.id, status: "ACTIVE" })}>
-                      العودة
+                      {t.hr.returnToWork}
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" onClick={() => remove(employee.id)}>
+                  <Button variant="ghost" size="icon" title={t.common.delete} onClick={() => remove(employee.id)}>
                     <Trash2 className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 </TableCell>
@@ -234,6 +235,7 @@ function EmployeesTab() {
  * number anyone wants in payroll.
  */
 function AttendanceDialog() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState("");
   const [date, setDate] = useState(today());
@@ -256,12 +258,12 @@ function AttendanceDialog() {
           status: status || undefined,
         }),
       }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "تعذّر تسجيل الحضور");
+        if (!r.ok) throw new Error((await r.json()).error ?? t.hr.attendanceFailed);
         return r.json();
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["attendance"] });
-      toast.success("تم تسجيل الحضور");
+      toast.success(t.hr.attendanceRecorded);
       setOpen(false);
       setEmployeeId("");
       setCheckIn("");
@@ -273,49 +275,49 @@ function AttendanceDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> تسجيل حضور</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> {t.hr.recordAttendance}</Button></DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>تسجيل حضور</DialogTitle>
+          <DialogTitle>{t.hr.recordAttendance}</DialogTitle>
           <DialogDescription>
-            تُشتق الحالة من أوقات الدخول والخروج؛ الإجازة والغياب يُسجّلان بناءً على قرار مشرف.
+            {t.hr.attendanceHint}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="att-employee">الموظف</Label>
+            <Label htmlFor="att-employee">{t.hr.employee}</Label>
             <NativeSelect id="att-employee" className="w-full" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-              <option value="">اختر الموظف...</option>
+              <option value="">{t.hr.selectEmployee}</option>
               {employeeData?.employees?.map((e: any) => (
                 <option key={e.id} value={e.id}>{e.employeeCode} — {e.firstName} {e.lastName}</option>
               ))}
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="att-date">التاريخ</Label>
+            <Label htmlFor="att-date">{t.common.date}</Label>
             <Input id="att-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="att-in">وقت الدخول</Label>
+              <Label htmlFor="att-in">{t.hr.checkIn}</Label>
               <Input id="att-in" type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="att-out">وقت الخروج</Label>
+              <Label htmlFor="att-out">{t.hr.checkOut}</Label>
               <Input id="att-out" type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} />
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="att-status">تعديل الحالة</Label>
+            <Label htmlFor="att-status">{t.hr.overrideStatus}</Label>
             <NativeSelect id="att-status" className="w-full" value={status} onChange={(e) => setStatus(e.target.value)}>
-              <option value="">مشتق تلقائياً</option>
-              <option value="LEAVE">إجازة</option>
-              <option value="ABSENT">غياب</option>
+              <option value="">{t.hr.autoDerived}</option>
+              <option value="LEAVE">{t.hr.leave}</option>
+              <option value="ABSENT">{t.hr.absent}</option>
             </NativeSelect>
           </div>
         </div>
         <DialogFooter>
-          <Button disabled={isPending || !employeeId} onClick={() => mutate()}>{isPending ? "جارٍ الحفظ..." : "تسجيل"}</Button>
+          <Button disabled={isPending || !employeeId} onClick={() => mutate()}>{isPending ? t.common.saving : t.hr.record}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -323,6 +325,7 @@ function AttendanceDialog() {
 }
 
 function AttendanceTab() {
+  const { t } = useI18n();
   const [date, setDate] = useState(today());
   const { data, isLoading } = useAttendance(date, "");
   const records = data?.attendance ?? [];
@@ -333,7 +336,7 @@ function AttendanceTab() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-end gap-2">
           <div className="space-y-1.5">
-            <Label htmlFor="attendance-date">التاريخ</Label>
+            <Label htmlFor="attendance-date">{t.common.date}</Label>
             <Input id="attendance-date" type="date" className="w-40" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
@@ -342,12 +345,12 @@ function AttendanceTab() {
 
       {summary && (
         <div className="flex flex-wrap gap-4 text-sm">
-          <span>حاضر: <span className="font-medium">{summary.present}</span></span>
-          <span>متأخر: <span className="font-medium">{summary.late}</span></span>
-          <span>غياب: <span className="font-medium text-destructive">{summary.absent}</span></span>
-          <span>إجازة: <span className="font-medium">{summary.leave}</span></span>
+          <span>{t.hr.present}: <span className="font-medium">{summary.present}</span></span>
+          <span>{t.hr.late}: <span className="font-medium">{summary.late}</span></span>
+          <span>{t.hr.absent}: <span className="font-medium text-destructive">{summary.absent}</span></span>
+          <span>{t.hr.leave}: <span className="font-medium">{summary.leave}</span></span>
           <span>
-            نسبة الحضور:{" "}
+            {t.hr.attendanceRate}:{" "}
             <span className={summary.attendanceRatePercent < 90 ? "font-medium text-destructive" : "font-medium"}>
               {formatPercent(summary.attendanceRatePercent)}
             </span>
@@ -359,11 +362,11 @@ function AttendanceTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>الموظف</TableHead>
-              <TableHead>الدخول</TableHead>
-              <TableHead>الخروج</TableHead>
-              <TableHead>الحالة</TableHead>
-              <TableHead>ملاحظات</TableHead>
+              <TableHead>{t.hr.employee}</TableHead>
+              <TableHead>{t.hr.checkInShort}</TableHead>
+              <TableHead>{t.hr.checkOutShort}</TableHead>
+              <TableHead>{t.common.status}</TableHead>
+              <TableHead>{t.hr.notes}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -373,7 +376,7 @@ function AttendanceTab() {
             {!isLoading && records.length === 0 && (
               <TableRow>
                 <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                  <CalendarCheck className="mx-auto mb-2 h-6 w-6" /> لا يوجد سجل حضور لهذا اليوم.
+                  <CalendarCheck className="mx-auto mb-2 h-6 w-6" /> {t.hr.noRecords}
                 </TableCell>
               </TableRow>
             )}
@@ -386,7 +389,7 @@ function AttendanceTab() {
                 <TableCell>{record.checkIn ? formatTime(record.checkIn) : "—"}</TableCell>
                 <TableCell>{record.checkOut ? formatTime(record.checkOut) : "—"}</TableCell>
                 <TableCell>
-                  <Badge variant={ATTENDANCE_VARIANT[record.status]}>{ATTENDANCE_LABELS[record.status]}</Badge>
+                  <Badge variant={ATTENDANCE_VARIANT[record.status]}>{t.attendanceStatus[record.status as keyof typeof t.attendanceStatus] ?? record.status}</Badge>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">{record.notes ?? "—"}</TableCell>
               </TableRow>
@@ -399,17 +402,18 @@ function AttendanceTab() {
 }
 
 export default function HrPage() {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">الموارد البشرية</h1>
-        <p className="text-sm text-muted-foreground">سجل الموظفين وتتبّع الحضور اليومي.</p>
+        <h1 className="text-xl font-semibold tracking-tight">{t.nav.hr}</h1>
+        <p className="text-sm text-muted-foreground">{t.hr.description}</p>
       </div>
 
       <Tabs defaultValue="employees">
         <TabsList>
-          <TabsTrigger value="employees">الموظفون</TabsTrigger>
-          <TabsTrigger value="attendance">الحضور</TabsTrigger>
+          <TabsTrigger value="employees">{t.hr.employees}</TabsTrigger>
+          <TabsTrigger value="attendance">{t.hr.attendance}</TabsTrigger>
         </TabsList>
         <TabsContent value="employees"><EmployeesTab /></TabsContent>
         <TabsContent value="attendance"><AttendanceTab /></TabsContent>

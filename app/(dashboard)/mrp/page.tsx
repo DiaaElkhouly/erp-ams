@@ -26,7 +26,7 @@ export default function MrpPage() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: `MRP Run ${new Date().toLocaleString()}` }),
     }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error ?? "Failed"); return r.json(); }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mrp-runs"] }); toast.success("MRP run complete"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["mrp-runs"] }); toast.success(t.mrp.runComplete); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -44,11 +44,11 @@ export default function MrpPage() {
       // Skipped lines are the actionable part: nobody can order an item that has
       // no supplier, so say which ones and why instead of reporting a clean run.
       if (payload.skipped?.length) {
-        toast.warning(`Created ${payload.purchaseOrders.length} purchase order(s); skipped ${payload.skipped.length} line(s).`, {
+        toast.warning(t.mrp.generatedWithSkips(payload.purchaseOrders.length, payload.skipped.length), {
           description: payload.skipped.map((s: any) => `${s.itemId}: ${s.reason}`).join(" · "),
         });
       } else {
-        toast.success(`Created ${payload.purchaseOrders.length} draft purchase order(s)`);
+        toast.success(t.mrp.generatedDrafts(payload.purchaseOrders.length));
       }
     },
     onError: (e: Error) => toast.error(e.message),
@@ -65,7 +65,7 @@ export default function MrpPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{t.nav.mrp}</h1>
-          <p className="text-sm text-muted-foreground">{t.localeName === "العربية" ? "يقارن المخزون المتاح بالطلب المفتوح ويقترح الكميات المطلوبة." : "Compares on-hand stock against open demand and suggests replenishment."}</p>
+          <p className="text-sm text-muted-foreground">{t.mrp.description}</p>
         </div>
         <Button size="sm" onClick={() => run()} disabled={isPending}>
           <PlayCircle className="h-4 w-4" /> {isPending ? t.common.running : `${t.common.run} MRP`}
@@ -76,7 +76,7 @@ export default function MrpPage() {
 
       {!isLoading && !latest && (
         <Card><CardContent className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-          <CalendarClock className="h-6 w-6" /> {t.localeName === "العربية" ? "لا توجد عمليات تخطيط بعد. اضغط تشغيل لإنشاء المقترحات." : "No MRP runs yet. Click \"Run MRP\" to generate suggestions."}
+          <CalendarClock className="h-6 w-6" /> {t.mrp.empty}
         </CardContent></Card>
       )}
 
@@ -84,30 +84,30 @@ export default function MrpPage() {
         <Card>
           <CardHeader>
             <CardTitle>{latest.name}</CardTitle>
-            <CardDescription>{t.localeName === "العربية" ? "تاريخ التشغيل" : "Run at"} {formatDate(latest.runAt)} &middot; {latest.lines.length} {t.localeName === "العربية" ? "مقترحات إعادة طلب" : "suggested replenishments"}</CardDescription>
+            <CardDescription>{t.mrp.runAt} {formatDate(latest.runAt)} &middot; {latest.lines.length} {t.mrp.suggestions}</CardDescription>
           </CardHeader>
           <CardContent>
             {latest.lines.length > 0 && ungenerated.length > 0 && (
               <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 p-3">
                 <p className="text-sm text-muted-foreground">
-                  {ungenerated.length} suggestion(s) can be turned into draft purchase orders, grouped by supplier.
+                  {t.mrp.toPurchaseOrders(ungenerated.length)}
                 </p>
                 <Button size="sm" variant="outline" onClick={() => generate()} disabled={generating}>
-                  <ShoppingCart className="h-4 w-4" /> {generating ? "Generating..." : "Generate draft POs"}
+                  <ShoppingCart className="h-4 w-4" /> {generating ? t.mrp.generating : t.mrp.generatePurchaseOrders}
                 </Button>
               </div>
             )}
 
             {latest.lines.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">{t.localeName === "العربية" ? "جميع الأصناف أعلى من نقطة إعادة الطلب. لا توجد كميات مطلوبة." : "All items are above their reorder point. Nothing to replenish."}</p>
+              <p className="py-6 text-center text-sm text-muted-foreground">{t.mrp.nothingToReplenish}</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>{t.common.item}</TableHead>
                     <TableHead>{t.common.onHand}</TableHead>
-                    <TableHead>{t.localeName === "العربية" ? "الطلب المفتوح" : "Open demand"}</TableHead>
-                    <TableHead>{t.localeName === "العربية" ? "الكمية المقترحة" : "Suggested qty"}</TableHead>
+                    <TableHead>{t.mrp.openDemand}</TableHead>
+                    <TableHead>{t.mrp.suggestedQty}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>

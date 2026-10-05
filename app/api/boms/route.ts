@@ -10,13 +10,18 @@ const schema = z.object({
   components: z.array(z.object({ itemId: z.string(), quantity: z.coerce.number().positive() })).min(1),
 });
 
+/** Every read returns the component list plus the work-order count the UI needs
+ * to know whether the composition is still editable (see app/api/boms/[id]). */
+const include = {
+  finishedItem: true,
+  components: { include: { item: true } },
+  _count: { select: { workOrders: true } },
+} as const;
+
 export async function GET() {
   const { error } = await requireModuleAccess("bom");
   if (error) return error;
-  const boms = await db.bom.findMany({
-    include: { finishedItem: true, components: { include: { item: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const boms = await db.bom.findMany({ include, orderBy: { createdAt: "desc" } });
   return NextResponse.json({ boms });
 }
 
@@ -34,7 +39,7 @@ export async function POST(req: NextRequest) {
           version: body.version,
           components: { create: body.components },
         },
-        include: { finishedItem: true, components: { include: { item: true } } },
+        include,
       });
       return { data: bom, status: 201 };
     });

@@ -16,15 +16,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatDate } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 const STATUS_VARIANT: Record<string, "secondary" | "default" | "warning" | "success" | "destructive"> = {
   PLANNED: "secondary", RELEASED: "default", IN_PROGRESS: "warning", COMPLETED: "success", CANCELLED: "destructive",
 };
 const STATUS_FLOW: Record<string, string | null> = {
   PLANNED: "RELEASED", RELEASED: "IN_PROGRESS", IN_PROGRESS: "COMPLETED", COMPLETED: null, CANCELLED: null,
-};
-const STATUS_LABELS: Record<string, string> = {
-  PLANNED: "مخطط", RELEASED: "مُعتمد", IN_PROGRESS: "قيد التنفيذ", COMPLETED: "مكتمل", CANCELLED: "ملغى",
 };
 
 function useWorkOrders() {
@@ -38,6 +36,7 @@ function useWarehousesList() {
 }
 
 function NewWorkOrderDialog() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const { data: bomData } = useBomsList();
   const { data: whData } = useWarehousesList();
@@ -54,7 +53,7 @@ function NewWorkOrderDialog() {
     }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error ?? "Failed"); return r.json(); }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["work-orders"] });
-      toast.success("تم إنشاء أمر الإنتاج");
+      toast.success(t.production.created);
       setOpen(false);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -62,36 +61,36 @@ function NewWorkOrderDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> أمر إنتاج جديد</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> {t.common.newWorkOrder}</Button></DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>إنشاء أمر إنتاج</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t.production.createTitle}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>قائمة المواد</Label>
+            <Label>{t.production.bom}</Label>
             <NativeSelect className="w-full" value={form.bomId} onChange={(e) => setForm({ ...form, bomId: e.target.value })}>
-              <option value="">اختر قائمة المواد...</option>
+              <option value="">{t.production.selectBom}</option>
               {bomData?.boms.map((b: any) => <option key={b.id} value={b.id}>{b.name} (v{b.version}) &rarr; {b.finishedItem?.sku}</option>)}
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
-            <Label>المستودع المستهدف</Label>
+            <Label>{t.production.targetWarehouse}</Label>
             <NativeSelect className="w-full" value={form.warehouseId} onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}>
-              <option value="">اختر مستودعًا...</option>
+              <option value="">{t.production.selectWarehouse}</option>
               {whData?.warehouses.map((w: any) => <option key={w.id} value={w.id}>{w.name}</option>)}
             </NativeSelect>
           </div>
           <div className="space-y-1.5">
-            <Label>كمية الإنتاج</Label>
+            <Label>{t.production.quantity}</Label>
             <Input type="number" min={1} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: Number(e.target.value) })} />
           </div>
           <div className="space-y-1.5">
-            <Label>تاريخ الاستحقاق</Label>
+            <Label>{t.production.dueDate}</Label>
             <Input type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
           </div>
         </div>
         <DialogFooter>
           <Button disabled={isPending || !form.bomId || !form.warehouseId} onClick={() => mutate()}>
-            {isPending ? "جارٍ الإنشاء..." : "إنشاء أمر الإنتاج"}
+            {isPending ? t.production.creating : t.production.create}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -100,27 +99,28 @@ function NewWorkOrderDialog() {
 }
 
 export default function ProductionPage() {
+  const { t } = useI18n();
   const { data, isLoading } = useWorkOrders();
   const qc = useQueryClient();
   const { mutate: advance } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       fetch(`/api/work-orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["work-orders"] }); toast.success("تم تحديث الحالة"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["work-orders"] }); toast.success(t.common.statusUpdated); },
   });
   const { mutate: remove } = useMutation({
     mutationFn: (id: string) => fetch(`/api/work-orders/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["work-orders"] }); toast.success("تم حذف أمر الإنتاج"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["work-orders"] }); toast.success(t.production.deleted); },
   });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">الإنتاج</h1>
-          <p className="text-sm text-muted-foreground">متابعة أوامر الإنتاج من التخطيط حتى الإكمال.</p>
+          <h1 className="text-xl font-semibold tracking-tight">{t.nav.production}</h1>
+          <p className="text-sm text-muted-foreground">{t.pages.productionDescription}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/lab"><Button size="sm" variant="outline"><FlaskConical className="h-4 w-4" />تصميم الخلطات</Button></Link>
+          <Link href="/lab"><Button size="sm" variant="outline"><FlaskConical className="h-4 w-4" />{t.production.mixDesign}</Button></Link>
           <NewWorkOrderDialog />
         </div>
       </div>
@@ -129,12 +129,12 @@ export default function ProductionPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>رقم الطلب</TableHead>
-              <TableHead>قائمة المواد</TableHead>
-              <TableHead>المستودع</TableHead>
-              <TableHead>الكمية</TableHead>
-              <TableHead>الاستحقاق</TableHead>
-              <TableHead>الحالة</TableHead>
+              <TableHead>{t.common.orderNumber}</TableHead>
+              <TableHead>{t.nav.bom}</TableHead>
+              <TableHead>{t.common.warehouse}</TableHead>
+              <TableHead>{t.common.quantity}</TableHead>
+              <TableHead>{t.production.due}</TableHead>
+              <TableHead>{t.common.status}</TableHead>
               <TableHead className="w-24" />
             </TableRow>
           </TableHeader>
@@ -144,7 +144,7 @@ export default function ProductionPage() {
             ))}
             {!isLoading && data?.workOrders.length === 0 && (
               <TableRow><TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                <Factory className="mx-auto mb-2 h-6 w-6" /> لا توجد أوامر إنتاج بعد.
+                <Factory className="mx-auto mb-2 h-6 w-6" /> {t.production.empty}
               </TableCell></TableRow>
             )}
             {data?.workOrders.map((wo: any) => {
@@ -156,11 +156,11 @@ export default function ProductionPage() {
                   <TableCell>{wo.warehouse.name}</TableCell>
                   <TableCell>{wo.quantity}</TableCell>
                   <TableCell>{wo.dueDate ? formatDate(wo.dueDate) : "—"}</TableCell>
-                  <TableCell><Badge variant={STATUS_VARIANT[wo.status]}>{STATUS_LABELS[wo.status]}</Badge></TableCell>
+                  <TableCell><Badge variant={STATUS_VARIANT[wo.status]}>{t.status[wo.status as keyof typeof t.status]}</Badge></TableCell>
                   <TableCell className="flex items-center gap-1">
                     {next && (
                       <Button size="sm" variant="outline" onClick={() => advance({ id: wo.id, status: next })}>
-                        نقل إلى {STATUS_LABELS[next]}
+                        {t.production.moveTo(t.status[next as keyof typeof t.status])}
                       </Button>
                     )}
                     <Button variant="ghost" size="icon" onClick={() => remove(wo.id)}>

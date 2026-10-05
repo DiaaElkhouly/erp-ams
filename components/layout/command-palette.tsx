@@ -36,7 +36,7 @@ export function CommandPalette({
         <Command>
           <Command.Input
             autoFocus
-            placeholder={t.localeName === "العربية" ? "انتقل إلى وحدة..." : "Jump to a module..."}
+            placeholder={t.commandPalette.placeholder}
             className="w-full border-b bg-transparent px-4 py-3 text-sm outline-none placeholder:text-muted-foreground"
           />
           <Command.List className="max-h-80 overflow-y-auto p-2">

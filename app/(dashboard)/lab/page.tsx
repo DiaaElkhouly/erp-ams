@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/select-native";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useI18n } from "@/lib/i18n";
+import { FileUpload } from "@/components/shared/file-upload";
+import { useI18n, type Locale } from "@/lib/i18n";
 
 type TestDefinition = { group: string; groupAr: string; groupEn: string; nameAr: string; nameEn: string; unit: string; standard: string; materials: string[] };
 type Material = { id: string; nameAr: string; nameEn: string; category: string };
@@ -186,9 +187,8 @@ function number(value: unknown) {
 }
 
 export default function LaboratoryPage() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const isAr = locale === "ar";
-  const text = (ar: string, en: string) => isAr ? ar : en;
   const queryClient = useQueryClient();
   const [section, setSection] = useState("overview");
   const [selectedMaterial, setSelectedMaterial] = useState("sand");
@@ -196,6 +196,7 @@ export default function LaboratoryPage() {
   const [result, setResult] = useState("");
   const [minValue, setMinValue] = useState("");
   const [maxValue, setMaxValue] = useState("");
+  const [attachmentKey, setAttachmentKey] = useState("");
   const [sieveValues, setSieveValues] = useState<Record<string, string>>({});
   const [mix, setMix] = useState<MixForm>(initialMix);
 
@@ -203,7 +204,7 @@ export default function LaboratoryPage() {
     queryKey: ["lab"],
     queryFn: async () => {
       const response = await fetch("/api/lab");
-      if (!response.ok) throw new Error("Unable to load laboratory records");
+      if (!response.ok) throw new Error(t.lab.loadFailed);
       return response.json() as Promise<{ tests: any[]; mixDesigns: any[] }>;
     },
   });
@@ -227,7 +228,7 @@ export default function LaboratoryPage() {
   const effectiveResult = activeTest?.nameEn === "Sieve analysis" ? sieveResult?.value ?? null : result === "" ? null : Number(result);
   const testMutation = useMutation({
     mutationFn: async () => {
-      if (!activeTest || effectiveResult === null) throw new Error(text("أدخل بيانات الاختبار المطلوبة.", "Enter the required test data."));
+      if (!activeTest || effectiveResult === null) throw new Error(t.lab.enterTestData);
       const value = effectiveResult;
       const minimum = minValue === "" ? null : Number(minValue);
       const maximum = maxValue === "" ? null : Number(maxValue);
@@ -240,6 +241,7 @@ export default function LaboratoryPage() {
           testName: isAr ? activeTest.nameAr : activeTest.nameEn, result: value,
           unit: activeTest.nameEn === "Sieve analysis" ? (selectedMaterial === "sand" ? "FM" : "%") : activeTest.unit,
           standard: activeTest.standard, minValue: minimum, maxValue: maximum, status,
+          attachmentKey: attachmentKey || null,
           details: activeTest.nameEn === "Sieve analysis" ? {
             sieves: Object.fromEntries(Object.entries(sieveValues).filter(([, passing]) => passing !== "").map(([size, passing]) => [size, Number(passing)])),
             metricLabel: sieveResult?.label,
@@ -247,13 +249,13 @@ export default function LaboratoryPage() {
         }),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Unable to save test");
+      if (!response.ok) throw new Error(body.error ?? t.lab.saveFailed);
       return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lab"] });
-      toast.success(text("تم حفظ نتيجة الاختبار", "Test result saved"));
-      setResult(""); setMinValue(""); setMaxValue(""); setSieveValues({});
+      toast.success(t.lab.testSaved);
+      setResult(""); setMinValue(""); setMaxValue(""); setSieveValues({}); setAttachmentKey("");
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -286,7 +288,7 @@ export default function LaboratoryPage() {
 
   const mixMutation = useMutation({
     mutationFn: async () => {
-      if (!mix.name.trim()) throw new Error(text("أدخل اسم تصميم الخلطة.", "Enter a mix design name."));
+      if (!mix.name.trim()) throw new Error(t.lab.enterMixName);
       const response = await fetch("/api/lab", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -307,12 +309,12 @@ export default function LaboratoryPage() {
         }),
       });
       const body = await response.json();
-      if (!response.ok) throw new Error(body.error ?? "Unable to save mix design");
+      if (!response.ok) throw new Error(body.error ?? t.lab.mixSaveFailed);
       return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["lab"] });
-      toast.success(text("تم حفظ تصميم الخلطة", "Mix design saved"));
+      toast.success(t.lab.mixSaved);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -340,11 +342,11 @@ export default function LaboratoryPage() {
       if (record) updates[field] = Number(record.result);
     }
     if (!Object.keys(updates).length) {
-      toast.error(text("لا توجد نتائج رطوبة أو امتصاص أو تدرج أو كثافة مسجلة بعد.", "No moisture, absorption, grading, or density results are available yet."));
+      toast.error(t.lab.noLabResultsYet);
       return;
     }
     setMix((current) => ({ ...current, ...updates }));
-    toast.success(text(`تم تحديث ${Object.keys(updates).length} قيمة من أحدث الاختبارات`, `Updated ${Object.keys(updates).length} values from latest tests`));
+    toast.success(t.lab.updatedFromLab(Object.keys(updates).length));
   }
 
   const testCount = data?.tests?.length ?? 0;
@@ -374,27 +376,27 @@ export default function LaboratoryPage() {
   return <div className="space-y-6">
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
-        <div className="flex items-center gap-2 text-sm text-muted-foreground"><FlaskConical className="h-4 w-4 text-primary" />{text("ضبط الجودة والخلطات", "Quality control and mix design")}</div>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight">{text("المعمل", "Laboratory")}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{text("اختبارات المواد والمنتجات، واعتماد تصميمات الخلطات ومراجعة نتائجها.", "Material and product testing, mix design, and result review.")}</p>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground"><FlaskConical className="h-4 w-4 text-primary" />{t.lab.tagline}</div>
+        <h1 className="mt-1 text-xl font-semibold tracking-tight">{t.nav.lab}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{t.lab.description}</p>
       </div>
       <div className="flex gap-2">
-        <Link href="/inventory"><Button size="sm" variant="outline">{text("المخزون", "Inventory")}<ArrowUpRight className="h-3.5 w-3.5" /></Button></Link>
-        <Link href="/production"><Button size="sm" variant="outline">{text("الإنتاج", "Production")}<ArrowUpRight className="h-3.5 w-3.5" /></Button></Link>
+        <Link href="/inventory"><Button size="sm" variant="outline">{t.nav.inventory}<ArrowUpRight className="h-3.5 w-3.5" /></Button></Link>
+        <Link href="/production"><Button size="sm" variant="outline">{t.nav.production}<ArrowUpRight className="h-3.5 w-3.5" /></Button></Link>
       </div>
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {metric(text("نتائج الاختبارات", "Test records"), String(testCount), text("آخر 200 نتيجة محفوظة", "Latest 200 saved results"), <TestTube2 className="h-4 w-4" />)}
-      {metric(text("مطابق", "Conforming"), String(passCount), text("ضمن حدود القبول المدخلة", "Within entered acceptance limits"), <ShieldCheck className="h-4 w-4" />)}
-      {metric(text("غير مطابق", "Nonconforming"), String(failedCount), text("يحتاج مراجعة الجودة", "Requires quality review"), <ClipboardCheck className="h-4 w-4" />)}
-      {metric(text("تصميمات الخلطات", "Mix designs"), String(data?.mixDesigns?.length ?? 0), text("البلوك والطوب والإنترلوك", "Blocks, bricks and pavers"), <Ruler className="h-4 w-4" />)}
+      {metric(t.lab.testRecords, String(testCount), t.lab.testRecordsCount, <TestTube2 className="h-4 w-4" />)}
+      {metric(t.lab.conforming, String(passCount), t.lab.conformingHint, <ShieldCheck className="h-4 w-4" />)}
+      {metric(t.lab.nonconforming, String(failedCount), t.lab.nonconformingHint, <ClipboardCheck className="h-4 w-4" />)}
+      {metric(t.lab.mixDesigns, String(data?.mixDesigns?.length ?? 0), t.lab.mixDesignsHint, <Ruler className="h-4 w-4" />)}
     </div>
 
     <div className="flex gap-1 overflow-x-auto border-b">
       {[
-        ["overview", text("نظرة عامة", "Overview")], ["tests", text("الاختبارات", "Test records")],
-        ["mix", text("تصميم الخلطات", "Mix design")], ["standards", text("الأكواد والمواصفات", "Standards")],
+        ["overview", t.lab.overview], ["tests", t.lab.tests],
+        ["mix", t.lab.mix], ["standards", t.lab.standards],
       ].map(([value, label]) => <button key={value} onClick={() => setSection(value)}
         className={`whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${section === value ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>
         {label}
@@ -402,121 +404,132 @@ export default function LaboratoryPage() {
     </div>
 
     {section === "overview" && <div className="space-y-6">
-      <div className="flex items-center justify-between"><div><h2 className="text-base font-semibold">{text("نطاق الاختبارات", "Testing scope")}</h2><p className="mt-1 text-sm text-muted-foreground">{text("اختر فئة لعرض الاختبارات المتاحة وتسجيل النتائج.", "Choose a category to view available tests and record results.")}</p></div>
-        <Button size="sm" onClick={() => setSection("tests")}><Plus className="h-4 w-4" />{text("تسجيل اختبار", "Record a test")}</Button></div>
+      <div className="flex items-center justify-between"><div><h2 className="text-base font-semibold">{t.lab.testingScope}</h2><p className="mt-1 text-sm text-muted-foreground">{t.lab.testingScopeHint}</p></div>
+        <Button size="sm" onClick={() => setSection("tests")}><Plus className="h-4 w-4" />{t.lab.recordTest}</Button></div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => <button key={group.group} onClick={() => { setSelectedMaterial(group.materials[0]); setSelectedTest(""); setSection("tests"); }} className="text-left">
           <Card className="h-full transition-colors hover:border-primary/50"><CardContent className="flex items-center justify-between gap-3 p-4">
-            <div><p className="font-medium">{isAr ? group.groupAr : group.groupEn}</p><p className="mt-1 text-xs text-muted-foreground">{groupCounts[group.group]} {text("اختباراً معرفاً", "defined tests")}</p></div>
+            <div><p className="font-medium">{isAr ? group.groupAr : group.groupEn}</p><p className="mt-1 text-xs text-muted-foreground">{t.lab.definedTests(groupCounts[group.group])}</p></div>
             <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           </CardContent></Card>
         </button>)}
       </div>
-      <Card><CardHeader><CardTitle className="text-base">{text("أحدث النتائج", "Latest results")}</CardTitle></CardHeader><CardContent>
-        <TestTable tests={data?.tests ?? []} loading={isLoading} isAr={isAr} emptyText={text("لا توجد نتائج محفوظة بعد.", "No saved results yet.")} />
+      <Card><CardHeader><CardTitle className="text-base">{t.lab.latestResults}</CardTitle></CardHeader><CardContent>
+        <TestTable tests={data?.tests ?? []} loading={isLoading} locale={locale} emptyText={t.lab.noSavedResults} />
       </CardContent></Card>
     </div>}
 
     {section === "tests" && <div className="space-y-5">
-      <Card><CardHeader><CardTitle className="text-base">{text("تسجيل نتيجة اختبار", "Record a test result")}</CardTitle></CardHeader><CardContent>
+      <Card><CardHeader><CardTitle className="text-base">{t.lab.recordTestResult}</CardTitle></CardHeader><CardContent>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div className="space-y-1.5"><Label>{text("الخامة / المنتج", "Material / product")}</Label><NativeSelect value={selectedMaterial} onChange={(event) => { setSelectedMaterial(event.target.value); setSelectedTest(""); }}>
+          <div className="space-y-1.5"><Label>{t.lab.materialProduct}</Label><NativeSelect value={selectedMaterial} onChange={(event) => { setSelectedMaterial(event.target.value); setSelectedTest(""); }}>
             {materials.map((material) => <option key={material.id} value={material.id}>{isAr ? material.nameAr : material.nameEn}</option>)}
           </NativeSelect></div>
-          <div className="space-y-1.5"><Label>{text("الاختبار", "Test")}</Label><NativeSelect value={activeTest?.nameEn ?? ""} onChange={(event) => setSelectedTest(event.target.value)}>
+          <div className="space-y-1.5"><Label>{t.lab.test}</Label><NativeSelect value={activeTest?.nameEn ?? ""} onChange={(event) => setSelectedTest(event.target.value)}>
             {availableTests.map((test) => <option key={`${test.group}-${test.nameEn}`} value={test.nameEn}>{isAr ? test.nameAr : test.nameEn}</option>)}
           </NativeSelect></div>
-          <div className="space-y-1.5"><Label>{activeTest?.nameEn === "Sieve analysis" ? text("المؤشر المحسوب", "Calculated index") : text("النتيجة", "Result")} {activeTest?.unit && <span className="text-muted-foreground">({activeTest.unit})</span>}</Label>
-            {activeTest?.nameEn === "Sieve analysis" ? <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm tabular-nums">{sieveResult ? `${sieveResult.value.toFixed(2)} · ${sieveResult.label}` : text("أكمل المناخل المطلوبة", "Complete required sieves")}</div> : <Input type="number" step="any" value={result} onChange={(event) => setResult(event.target.value)} />}
+          <div className="space-y-1.5"><Label>{activeTest?.nameEn === "Sieve analysis" ? t.lab.calculatedIndex : t.lab.result} {activeTest?.unit && <span className="text-muted-foreground">({activeTest.unit})</span>}</Label>
+            {activeTest?.nameEn === "Sieve analysis" ? <div className="flex h-9 items-center rounded-md border bg-muted px-3 text-sm tabular-nums">{sieveResult ? `${sieveResult.value.toFixed(2)} · ${sieveResult.label}` : t.lab.completeSieves}</div> : <Input type="number" step="any" value={result} onChange={(event) => setResult(event.target.value)} />}
           </div>
-          <div className="space-y-1.5"><Label>{text("مرجع الاختبار", "Test standard")}</Label><Input value={activeTest?.standard ?? ""} readOnly /></div>
-          <div className="space-y-1.5"><Label>{text("الحد الأدنى للقبول", "Acceptance minimum")}</Label><Input type="number" step="any" value={minValue} onChange={(event) => setMinValue(event.target.value)} placeholder={text("اختياري", "Optional")} /></div>
-          <div className="space-y-1.5"><Label>{text("الحد الأقصى للقبول", "Acceptance maximum")}</Label><Input type="number" step="any" value={maxValue} onChange={(event) => setMaxValue(event.target.value)} placeholder={text("اختياري", "Optional")} /></div>
-          <div className="flex items-end md:col-span-2"><Button disabled={testMutation.isPending || effectiveResult === null} onClick={() => testMutation.mutate()}><Plus className="h-4 w-4" />{testMutation.isPending ? text("جارٍ الحفظ...", "Saving...") : text("حفظ النتيجة", "Save result")}</Button></div>
+          <div className="space-y-1.5"><Label>{t.lab.testStandard}</Label><Input value={activeTest?.standard ?? ""} readOnly /></div>
+          <div className="space-y-1.5"><Label>{t.lab.acceptanceMin}</Label><Input type="number" step="any" value={minValue} onChange={(event) => setMinValue(event.target.value)} placeholder={t.lab.optional} /></div>
+          <div className="space-y-1.5"><Label>{t.lab.acceptanceMax}</Label><Input type="number" step="any" value={maxValue} onChange={(event) => setMaxValue(event.target.value)} placeholder={t.lab.optional} /></div>
+          <div className="md:col-span-2 xl:col-span-4">
+            <FileUpload
+              kind="lab-attachment"
+              accept="application/pdf,image/png,image/jpeg"
+              label={t.lab.testAttachment}
+              hint={t.lab.testAttachmentHint}
+              value={attachmentKey}
+              onUploaded={setAttachmentKey}
+              onCleared={() => setAttachmentKey("")}
+            />
+          </div>
+          <div className="flex items-end md:col-span-2"><Button disabled={testMutation.isPending || effectiveResult === null} onClick={() => testMutation.mutate()}><Plus className="h-4 w-4" />{testMutation.isPending ? t.common.saving : t.lab.saveResult}</Button></div>
         </div>
         {activeTest?.nameEn === "Sieve analysis" && <div className="mt-5 border-t pt-4">
-          <p className="mb-3 text-sm font-medium">{text("نسبة المار التراكمية لكل منخل · %", "Cumulative percent passing by sieve · %")}</p>
+          <p className="mb-3 text-sm font-medium">{t.lab.sievePassingTitle}</p>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
             {sieveSizes.map((size) => <div className="space-y-1.5" key={size}><Label htmlFor={`sieve-${size}`}>{size === "0.075" ? "0.075 mm (75 μm)" : `${size} mm`}</Label>
               <Input id={`sieve-${size}`} type="number" min="0" max="100" step="0.1" value={sieveValues[size] ?? ""} onChange={(event) => setSieveValues((current) => ({ ...current, [size]: event.target.value }))} />
             </div>)}
           </div>
-          <p className="mt-3 text-xs text-muted-foreground">{text("يُحسب معامل النعومة للرمل من المناخل القياسية من 4.75 إلى 0.15 مم؛ وللسن تُسجل نسبة المار وملخص المار من 4.75 مم.", "Sand fineness modulus uses standard sieves from 4.75 to 0.15 mm; coarse aggregate records percent passing and the 4.75 mm retained summary.")}</p>
+          <p className="mt-3 text-xs text-muted-foreground">{t.lab.sievePassingHint}</p>
         </div>}
-        <p className="mt-4 text-xs text-muted-foreground">{text("تُحدد المطابقة تلقائياً عند إدخال حدود القبول. بدون حدود، تحفظ النتيجة للمراجعة.", "Conformance is calculated from entered limits. Results without limits are marked for review.")}</p>
+        <p className="mt-4 text-xs text-muted-foreground">{t.lab.conformanceNote}</p>
       </CardContent></Card>
-      <Card><CardHeader><CardTitle className="text-base">{text("سجل الاختبارات", "Test register")}</CardTitle></CardHeader><CardContent>
-        <TestTable tests={data?.tests ?? []} loading={isLoading} isAr={isAr} emptyText={text("لم تسجل اختبارات لهذه الدورة بعد.", "No tests recorded in this session yet.")} />
+      <Card><CardHeader><CardTitle className="text-base">{t.lab.testRegister}</CardTitle></CardHeader><CardContent>
+        <TestTable tests={data?.tests ?? []} loading={isLoading} locale={locale} emptyText={t.lab.noTestsThisSession} />
       </CardContent></Card>
     </div>}
 
     {section === "mix" && <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-5">
-        <Card><CardHeader><CardTitle className="text-base">{text("بيانات التصميم", "Design details")}</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <div className="space-y-1.5"><Label>{text("اسم تصميم الخلطة", "Mix design name")}</Label><Input value={mix.name} onChange={(event) => setMix({ ...mix, name: event.target.value })} placeholder={text("مثال: بلوك 20 سم - خلطة 01", "e.g. 200 mm block · Mix 01")} /></div>
-          <div className="space-y-1.5"><Label>{text("نوع المنتج", "Product")}</Label><NativeSelect value={mix.productType} onChange={(event) => setMix({ ...mix, productType: event.target.value })}>
-            <option value="BLOCK">{text("بلوك", "Block")}</option><option value="BRICK">{text("طوب أسمنتي", "Concrete brick")}</option><option value="PAVER">{text("إنترلوك", "Interlock paver")}</option>
-            <option value="READY_MIX">{text("خرسانة جاهزة", "Ready-mix concrete")}</option>
+        <Card><CardHeader><CardTitle className="text-base">{t.lab.designDetails}</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-1.5"><Label>{t.lab.mixDesignName}</Label><Input value={mix.name} onChange={(event) => setMix({ ...mix, name: event.target.value })} placeholder={t.lab.mixDesignNamePlaceholder} /></div>
+          <div className="space-y-1.5"><Label>{t.lab.product}</Label><NativeSelect value={mix.productType} onChange={(event) => setMix({ ...mix, productType: event.target.value })}>
+            <option value="BLOCK">{t.lab.productType.BLOCK}</option><option value="BRICK">{t.lab.productType.BRICK}</option><option value="PAVER">{t.lab.productType.PAVER}</option>
+            <option value="READY_MIX">{t.lab.productType.READY_MIX}</option>
           </NativeSelect></div>
-          <div className="space-y-1.5"><Label>{text("المقاومة المطلوبة · MPa", "Required strength · MPa")}</Label><Input type="number" min="0.1" step="0.1" value={mix.requiredStrength} onChange={(event) => setMix({ ...mix, requiredStrength: number(event.target.value) })} /></div>
-          <div className="space-y-1.5"><Label>{text("نوع الأسمنت", "Cement type")}</Label><Input value={mix.cementType} onChange={(event) => setMix({ ...mix, cementType: event.target.value })} /></div>
-          <div className="space-y-1.5"><Label>{text("الكود / المواصفة", "Code / standard")}</Label><Input value={mix.standard} onChange={(event) => setMix({ ...mix, standard: event.target.value })} /></div>
-          {numberField("targetDensity", text("الكثافة المستهدفة · كجم/م³", "Target density · kg/m³"), "1")}
-          {numberField("voidRatio", text("نسبة الفراغات · %", "Voids · %"))}
-          {numberField("length", text("طول القطعة · مم", "Piece length · mm"), "1")}
-          {numberField("width", text("عرض القطعة · مم", "Piece width · mm"), "1")}
-          {numberField("height", text("ارتفاع / سمك القطعة · مم", "Piece height / thickness · mm"), "1")}
+          <div className="space-y-1.5"><Label>{t.lab.requiredStrength}</Label><Input type="number" min="0.1" step="0.1" value={mix.requiredStrength} onChange={(event) => setMix({ ...mix, requiredStrength: number(event.target.value) })} /></div>
+          <div className="space-y-1.5"><Label>{t.lab.cementType}</Label><Input value={mix.cementType} onChange={(event) => setMix({ ...mix, cementType: event.target.value })} /></div>
+          <div className="space-y-1.5"><Label>{t.lab.codeStandard}</Label><Input value={mix.standard} onChange={(event) => setMix({ ...mix, standard: event.target.value })} /></div>
+          {numberField("targetDensity", t.lab.targetDensity, "1")}
+          {numberField("voidRatio", t.lab.voids)}
+          {numberField("length", t.lab.pieceLength, "1")}
+          {numberField("width", t.lab.pieceWidth, "1")}
+          {numberField("height", t.lab.pieceHeight, "1")}
         </CardContent></Card>
 
-        <Card><CardHeader><CardTitle className="text-base">{text("مقادير الخلطة لكل متر مكعب", "Batch quantities per cubic metre")}</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card><CardHeader><CardTitle className="text-base">{t.lab.batchQuantities}</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {materialFields.map((field) => <div className="space-y-1.5" key={field.key}><Label htmlFor={field.key}>{isAr ? field.labelAr : field.labelEn}</Label>
             <Input id={field.key} type="number" step="0.1" min="0" value={mix[field.key] as number} onChange={(event) => setMix((current) => ({ ...current, [field.key]: number(event.target.value) }))} />
           </div>)}
         </CardContent></Card>
 
-        <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-primary" /><CardTitle className="text-base">{text("تصحيح الخامات بنتائج الاختبارات", "Test-based material corrections")}</CardTitle></div><Button size="sm" variant="outline" onClick={applyLatestLabResults}>{text("تطبيق أحدث نتائج المعمل", "Apply latest lab results")}</Button></div></CardHeader><CardContent>
-          <p className="mb-4 text-sm text-muted-foreground">{text("أدخل آخر نتائج الرطوبة والامتصاص، ثم تعديل التدرج المستخلص من التحليل المنخلي. تتغير أوزان التشغيل ومياه الإضافة مباشرة.", "Enter latest moisture and absorption results and grading adjustments from sieve analysis. Wet batch weights and added water update immediately.")}</p>
+        <Card><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><SlidersHorizontal className="h-4 w-4 text-primary" /><CardTitle className="text-base">{t.lab.corrections}</CardTitle></div><Button size="sm" variant="outline" onClick={applyLatestLabResults}>{t.lab.applyLatestResults}</Button></div></CardHeader><CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">{t.lab.correctionsHint}</p>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             {[
-              { prefix: "sand", title: text("الرمل", "Sand") },
-              { prefix: "aggregate1", title: text("سن 1", "Aggregate 1") },
-              { prefix: "aggregateHalf", title: text("سن نص", "Aggregate 1/2") },
+              { prefix: "sand", title: t.lab.sand },
+              { prefix: "aggregate1", title: t.lab.aggregate1 },
+              { prefix: "aggregateHalf", title: t.lab.aggregateHalf },
             ].map(({ prefix, title }) => <div key={prefix} className="space-y-3 border-t pt-3">
               <h3 className="text-sm font-medium">{title}</h3><div className="grid grid-cols-3 gap-2">
-                {numberField(`${prefix}Moisture` as keyof MixForm, text("رطوبة %", "Moisture %"))}
-                {numberField(`${prefix}Absorption` as keyof MixForm, text("امتصاص %", "Absorption %"))}
-                {numberField(`${prefix}Grading` as keyof MixForm, text("تعديل التدرج %", "Grading adj. %"))}
+                {numberField(`${prefix}Moisture` as keyof MixForm, t.lab.moisture)}
+                {numberField(`${prefix}Absorption` as keyof MixForm, t.lab.absorption)}
+                {numberField(`${prefix}Grading` as keyof MixForm, t.lab.gradingAdj)}
               </div>
             </div>)}
           </div>
-          <p className="mt-4 rounded-md bg-muted p-3 text-sm">{text("يُحدّث الزر القيم من أحدث سجلات الرطوبة والامتصاص وانحراف التدرج وكثافة الخلطة الطازجة. تُحسب مياه الإضافة والأوزان الرطبة تلقائياً؛ راجع صلاحية النتائج قبل اعتماد الإنتاج.", "The button imports the latest moisture, absorption, grading deviation, and fresh-density records. Added water and wet batch weights recalculate automatically; verify test validity before production release.")}</p>
+          <p className="mt-4 rounded-md bg-muted p-3 text-sm">{t.lab.correctionsNote}</p>
         </CardContent></Card>
 
-        <Card><CardHeader><CardTitle className="text-base">{text("تكلفة الخامات", "Material costs")}</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card><CardHeader><CardTitle className="text-base">{t.lab.materialCosts}</CardTitle></CardHeader><CardContent className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {costFields.map((field) => <div className="space-y-1.5" key={field.key}><Label htmlFor={field.key}>{isAr ? field.labelAr : field.labelEn}</Label>
             <Input id={field.key} type="number" min="0" step="1" value={mix[field.key] as number} onChange={(event) => setMix((current) => ({ ...current, [field.key]: number(event.target.value) }))} />
           </div>)}
         </CardContent></Card>
-        <Button disabled={mixMutation.isPending} onClick={() => mixMutation.mutate()}><Save className="h-4 w-4" />{mixMutation.isPending ? text("جارٍ الحفظ...", "Saving...") : text("حفظ تصميم الخلطة", "Save mix design")}</Button>
+        <Button disabled={mixMutation.isPending} onClick={() => mixMutation.mutate()}><Save className="h-4 w-4" />{mixMutation.isPending ? t.common.saving : t.lab.saveMixDesign}</Button>
       </div>
 
       <div className="space-y-4 xl:sticky xl:top-4">
-        <Card><CardHeader><CardTitle className="text-base">{text("نتيجة الحساب", "Calculated summary")}</CardTitle></CardHeader><CardContent className="space-y-3">
-          <SummaryRow label={text("المياه المصححة", "Corrected added water")} value={`${corrections.water.toFixed(1)} L/m³`} />
-          <SummaryRow label={text("وزن الرمل الرطب", "Wet sand to batch")} value={`${corrections.sandWet.toFixed(1)} kg`} />
-          <SummaryRow label={text("وزن سن 1 الرطب", "Wet aggregate 1")} value={`${corrections.aggregate1Wet.toFixed(1)} kg`} />
-          <SummaryRow label={text("وزن السن النص الرطب", "Wet aggregate 1/2")} value={`${corrections.aggregateHalfWet.toFixed(1)} kg`} />
-          <SummaryRow label={text("نسبة الماء/الأسمنت", "Water/cement ratio")} value={corrections.waterCement.toFixed(3)} />
-          <SummaryRow label={text("الكثافة المحسوبة", "Calculated batch density")} value={`${corrections.totalMass.toFixed(0)} kg/m³`} />
-          <SummaryRow label={text("الكثافة المستهدفة", "Target density")} value={`${mix.targetDensity.toFixed(0)} kg/m³`} />
-          <SummaryRow label={text("تكلفة المتر المكعب", "Cost per m³")} value={`${corrections.costPerM3.toFixed(2)} EGP`} strong />
-          <SummaryRow label={text("قطع لكل متر مكعب تقريباً", "Approx. pieces per m³")} value={corrections.piecesPerM3.toLocaleString()} />
-          <SummaryRow label={text("وزن القطعة التقديري", "Estimated piece weight")} value={`${corrections.pieceWeight.toFixed(2)} kg`} />
-          <SummaryRow label={text("تكلفة القطعة", "Cost per piece")} value={`${corrections.costPerPiece.toFixed(2)} EGP`} strong />
-          <p className="border-t pt-3 text-xs leading-5 text-muted-foreground">{text("حساب استرشادي للمواد والكميات. لا يمثل اعتماداً إنشائياً أو ضماناً للمقاومة؛ يلزم التحقق بخلطات تجريبية واختبارات معملية وفق الكود والمواصفة المعتمدين.", "Indicative material calculation only, not structural approval or a strength guarantee. Verify with trial batches and lab testing against the governing code and specification.")}</p>
+<Card><CardHeader><CardTitle className="text-base">{t.lab.calculatedSummary}</CardTitle></CardHeader><CardContent className="space-y-3">
+          <SummaryRow label={t.lab.correctedWater} value={`${corrections.water.toFixed(1)} L/m³`} />
+          <SummaryRow label={t.lab.wetSand} value={`${corrections.sandWet.toFixed(1)} kg`} />
+          <SummaryRow label={t.lab.wetAggregate1} value={`${corrections.aggregate1Wet.toFixed(1)} kg`} />
+          <SummaryRow label={t.lab.wetAggregateHalf} value={`${corrections.aggregateHalfWet.toFixed(1)} kg`} />
+          <SummaryRow label={t.lab.waterCementRatio} value={corrections.waterCement.toFixed(3)} />
+          <SummaryRow label={t.lab.batchDensity} value={`${corrections.totalMass.toFixed(0)} kg/m³`} />
+          <SummaryRow label={t.lab.targetDensityShort} value={`${mix.targetDensity.toFixed(0)} kg/m³`} />
+          <SummaryRow label={t.lab.costPerM3} value={`${corrections.costPerM3.toFixed(2)} EGP`} strong />
+          <SummaryRow label={t.lab.piecesPerM3} value={corrections.piecesPerM3.toLocaleString()} />
+          <SummaryRow label={t.lab.pieceWeight} value={`${corrections.pieceWeight.toFixed(2)} kg`} />
+          <SummaryRow label={t.lab.costPerPiece} value={`${corrections.costPerPiece.toFixed(2)} EGP`} strong />
+          <p className="border-t pt-3 text-xs leading-5 text-muted-foreground">{t.lab.calculationDisclaimer}</p>
         </CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-base">{text("التصميمات المحفوظة", "Saved designs")}</CardTitle></CardHeader><CardContent className="space-y-3">
-          {!data?.mixDesigns?.length && <p className="text-sm text-muted-foreground">{text("لا توجد تصميمات محفوظة بعد.", "No saved designs yet.")}</p>}
+        <Card><CardHeader><CardTitle className="text-base">{t.lab.savedDesigns}</CardTitle></CardHeader><CardContent className="space-y-3">
+          {!data?.mixDesigns?.length && <p className="text-sm text-muted-foreground">{t.lab.noSavedDesigns}</p>}
           {data?.mixDesigns?.slice(0, 6).map((design: any) => {
             const metrics = design.metrics as { costPerM3?: number; waterCement?: number };
             return <div key={design.id} className="border-b pb-3 last:border-0 last:pb-0">
@@ -525,8 +538,8 @@ export default function LaboratoryPage() {
               <p className="mt-1 text-xs">{number(metrics.costPerM3).toFixed(2)} EGP/m³ · W/C {number(metrics.waterCement).toFixed(3)}</p>
               <Button size="sm" variant="ghost" className="mt-1 h-7 px-2" onClick={() => {
                 setMix({ ...initialMix, ...(design.recipe as Partial<MixForm>) });
-                toast.success(text("تم تحميل التصميم للتعديل", "Design loaded for editing"));
-              }}>{text("تحميل للتعديل", "Load to edit")}</Button>
+                toast.success(t.lab.designLoaded);
+              }}>{t.lab.loadToEdit}</Button>
             </div>;
           })}
         </CardContent></Card>
@@ -534,11 +547,11 @@ export default function LaboratoryPage() {
     </div>}
 
     {section === "standards" && <div className="space-y-4">
-      <div><h2 className="text-base font-semibold">{text("مراجع الأكواد والمواصفات", "Codes and standards references")}</h2><p className="mt-1 text-sm text-muted-foreground">{text("يُعتمد المرجع والإصدار المحددان في العقد وتعليمات الاستشاري لكل اختبار.", "Use the edition and governing references specified by the contract and engineer for each test.")}</p></div>
+      <div><h2 className="text-base font-semibold">{t.lab.codesTitle}</h2><p className="mt-1 text-sm text-muted-foreground">{t.lab.codesHint}</p></div>
       <div className="grid gap-3 md:grid-cols-2">
         {standards.map((standard) => <Card key={standard.name}><CardContent className="p-4"><h3 className="font-medium">{standard.name}</h3><p className="mt-2 text-sm leading-6 text-muted-foreground">{isAr ? standard.detailAr : standard.detailEn}</p></CardContent></Card>)}
       </div>
-      <Card><CardContent className="p-4 text-sm leading-6 text-muted-foreground">{text("لا يضع النظام حدود قبول افتراضية موحدة؛ سجّل حدود القبول المعتمدة للمشروع حتى تكون حالة المطابقة ذات معنى. أرقام الأكواد وأحدث إصداراتها تحتاج مراجعة مسؤول الجودة والجهة المصرية المختصة قبل التطبيق.", "No universal acceptance limits are prefilled. Enter project-approved limits for meaningful conformance status. QA and the Egyptian authority should verify standard numbers and current editions before use.")}</CardContent></Card>
+      <Card><CardContent className="p-4 text-sm leading-6 text-muted-foreground">{t.lab.acceptanceLimitsNote}</CardContent></Card>
     </div>}
   </div>;
 }
@@ -547,22 +560,22 @@ function SummaryRow({ label, value, strong = false }: { label: string; value: st
   return <div className="flex items-center justify-between gap-3 text-sm"><span className="text-muted-foreground">{label}</span><span className={strong ? "font-semibold tabular-nums" : "font-medium tabular-nums"}>{value}</span></div>;
 }
 
-function TestTable({ tests, loading, isAr, emptyText }: { tests: any[]; loading: boolean; isAr: boolean; emptyText: string }) {
-  const label = (ar: string, en: string) => isAr ? ar : en;
+function TestTable({ tests, loading, locale, emptyText }: { tests: any[]; loading: boolean; locale: Locale; emptyText: string }) {
+  const { t } = useI18n();
   return <div className="overflow-x-auto">
     <Table><TableHeader><TableRow>
-      <TableHead>{label("التاريخ", "Date")}</TableHead><TableHead>{label("الخامة / المنتج", "Material / product")}</TableHead>
-      <TableHead>{label("الاختبار", "Test")}</TableHead><TableHead>{label("النتيجة", "Result")}</TableHead>
-      <TableHead>{label("المرجع", "Standard")}</TableHead><TableHead>{label("الحالة", "Status")}</TableHead>
+      <TableHead>{t.common.date}</TableHead><TableHead>{t.lab.materialProduct}</TableHead>
+      <TableHead>{t.lab.test}</TableHead><TableHead>{t.lab.result}</TableHead>
+      <TableHead>{t.lab.testStandard}</TableHead><TableHead>{t.common.status}</TableHead>
     </TableRow></TableHeader><TableBody>
-      {loading && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">{label("جارٍ تحميل النتائج...", "Loading results...")}</TableCell></TableRow>}
+      {loading && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">{t.lab.loadingResults}</TableCell></TableRow>}
       {!loading && tests.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">{emptyText}</TableCell></TableRow>}
       {!loading && tests.map((test) => <TableRow key={test.id}>
-        <TableCell className="whitespace-nowrap">{new Date(test.testedAt).toLocaleDateString(isAr ? "ar-EG" : "en-GB")}</TableCell>
+        <TableCell className="whitespace-nowrap">{new Date(test.testedAt).toLocaleDateString(locale === "ar" ? "ar-EG" : "en-GB")}</TableCell>
         <TableCell>{test.material}</TableCell><TableCell>
           <div>{test.testName}</div>
           {test.details?.sieves && <details className="mt-1 text-xs text-muted-foreground">
-            <summary className="cursor-pointer">{label("تفاصيل المناخل", "Sieve details")}</summary>
+            <summary className="cursor-pointer">{t.lab.sieveDetails}</summary>
             <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
               {Object.entries(test.details.sieves as Record<string, number>).sort(([first], [second]) => Number(second) - Number(first)).map(([size, passing]) =>
                 <span key={size}>{size} mm: {passing}%</span>)}
@@ -572,7 +585,7 @@ function TestTable({ tests, loading, isAr, emptyText }: { tests: any[]; loading:
         <TableCell className="font-mono tabular-nums">{test.result} {test.unit}</TableCell>
         <TableCell className="text-xs text-muted-foreground">{test.standard ?? "—"}</TableCell>
         <TableCell><Badge variant={test.status === "PASS" ? "success" : test.status === "FAIL" ? "destructive" : "warning"}>
-          {test.status === "PASS" ? label("مطابق", "Pass") : test.status === "FAIL" ? label("غير مطابق", "Fail") : label("مراجعة", "Review")}
+          {test.status === "PASS" ? t.lab.pass : test.status === "FAIL" ? t.lab.fail : t.lab.review}
         </Badge></TableCell>
       </TableRow>)}
     </TableBody></Table>

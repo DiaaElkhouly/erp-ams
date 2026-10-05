@@ -155,6 +155,9 @@ model Item {
   /// Where replenishment for this item is normally bought. MRP groups its
   /// suggestions by this so one run produces one draft PO per supplier.
   preferredSupplierId String?
+  /// Object key in Neon Object Storage, not a URL. Presigned on read, so the
+  /// bucket stays private and the key branches with the row that points at it.
+  photoKey      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -359,6 +362,9 @@ model LabTestRecord {
   maxValue  Float?
   status    String
   details   Json?
+  /// Object key of the scanned certificate or photo backing this result. Null:
+  /// plenty of tests are entered from the bench sheet alone.
+  attachmentKey String?
   testedAt  DateTime @default(now())
   createdAt DateTime @default(now())
 
@@ -485,6 +491,8 @@ model PurchaseOrder {
   supplier  Supplier            @relation(fields: [supplierId], references: [id])
   createdBy User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
   lines     PurchaseOrderLine[]
+  /// Object key of the supplier's PDF quote or the received delivery note.
+  documentKey String?
   mrpRunId  String?
   mrpRun      MrpRun?          @relation(fields: [mrpRunId], references: [id], onDelete: SetNull)
   mrpLines    MrpLine[]        @relation("MrpLinePurchaseOrder")

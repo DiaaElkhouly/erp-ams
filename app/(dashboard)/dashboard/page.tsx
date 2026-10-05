@@ -16,6 +16,7 @@ import { KpiCard, type KpiCardProps } from "@/components/shared/kpi-card";
 import { OfflineBanner } from "@/components/shared/offline-banner";
 import { DateRangeParams, formatRangeLabel, resolveDateRange } from "@/lib/date-range";
 import { getDashboardMetrics, getEarliestRecordDate, getOperationalSnapshot } from "@/lib/dashboard-metrics";
+import { getServerI18n } from "@/lib/i18n-server";
 import { DEFAULT_CURRENCY, formatMoney, formatNumber, formatPercent } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function DashboardPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const rawParams = await searchParams;
+  const { t } = await getServerI18n();
   const param = (key: string): string | undefined => {
     const value = rawParams[key];
     return Array.isArray(value) ? value[0] : value;
@@ -44,8 +46,8 @@ export default async function DashboardPage({
   const range = resolveDateRange(params, earliest);
 
   const [metrics, snapshot, openSalesOrders, openPurchaseOrders] = await Promise.all([
-    getDashboardMetrics(range),
-    getOperationalSnapshot(),
+    getDashboardMetrics(range, t),
+    getOperationalSnapshot(t),
     db.salesOrder.count({ where: { status: { in: ["DRAFT", "CONFIRMED"] } } }),
     db.purchaseOrder.count({ where: { status: { in: ["DRAFT", "ORDERED"] } } }),
   ]);
@@ -54,92 +56,98 @@ export default async function DashboardPage({
 
   const financialKpis: KpiCardProps[] = [
     {
-      label: "إجمالي الإيرادات",
+      label: t.dashboard.revenue,
       value: money(metrics.window.revenue),
       icon: "wallet",
       deltaPct: d.revenue.deltaPct,
-      footer: `${formatNumber(metrics.window.salesOrderCount, 0, "ar-EG")} طلب بيع · متوسط الطلب ${money(metrics.window.avgOrderValue)}`,
+      footer: t.dashboard.revenueFooter(formatNumber(metrics.window.salesOrderCount, 0), money(metrics.window.avgOrderValue)),
     },
     {
-      label: "تكلفة البضاعة المباعة",
+      label: t.dashboard.cogs,
       value: money(metrics.window.cogs),
       icon: "receipt",
       deltaPct: d.cogs.deltaPct,
       tone: "inverse",
-      footer: `تم بيع ${formatNumber(metrics.window.unitsSold, 0, "ar-EG")} وحدة`,
+      footer: t.dashboard.cogsFooter(formatNumber(metrics.window.unitsSold, 0)),
     },
     {
-      label: "مجمل الربح",
+      label: t.dashboard.grossProfit,
       value: money(metrics.window.grossProfit),
       icon: "trendingUp",
       deltaPct: d.grossProfit.deltaPct,
-      footer: `ربح للوحدة ${money(metrics.window.grossProfitPerUnit)}`,
+      footer: t.dashboard.grossProfitFooter(money(metrics.window.grossProfitPerUnit)),
     },
     {
-      label: "نسبة الربح الإجمالية",
+      label: t.dashboard.grossMargin,
       value: formatPercent(metrics.window.grossMarginPct),
       icon: "percent",
       deltaPct: d.grossMarginPct.deltaPct,
-      footer: `الفترة السابقة ${formatPercent(metrics.previous.grossMarginPct)}`,
+      footer: t.dashboard.previousPeriod(formatPercent(metrics.previous.grossMarginPct)),
     },
   ];
 
   const cashKpis: KpiCardProps[] = [
     {
-      label: "قيمة المشتريات",
+      label: t.dashboard.purchasesValue,
       value: money(metrics.window.purchases),
       icon: "shoppingCart",
       deltaPct: d.purchases.deltaPct,
       tone: "inverse",
-      footer: `${formatNumber(metrics.window.purchaseOrderCount, 0, "ar-EG")} طلب شراء`,
+      footer: t.dashboard.purchasesFooter(formatNumber(metrics.window.purchaseOrderCount, 0)),
     },
     {
-      label: "صافي التدفق النقدي",
+      label: t.dashboard.netCashFlow,
       value: money(metrics.window.netCashFlow),
       icon: "coins",
       deltaPct: d.netCashFlow.deltaPct,
-      footer: `تحصيل ${formatPercent(metrics.window.cashConversionPct)} من المشتريات`,
+      footer: t.dashboard.netCashFlowFooter(formatPercent(metrics.window.cashConversionPct)),
     },
     {
-      label: "قيمة المخزون الحالية",
+      label: t.dashboard.inventoryValue,
       value: money(metrics.inventory.totalValue),
       icon: "boxes",
-      footer: `${formatNumber(metrics.inventory.skuCount, 0, "ar-EG")} صنف · ${formatNumber(metrics.inventory.totalUnits, 0, "ar-EG")} وحدة`,
+      footer: t.dashboard.inventoryValueFooter(
+        formatNumber(metrics.inventory.skuCount, 0),
+        formatNumber(metrics.inventory.totalUnits, 0),
+      ),
     },
     {
-      label: "أصناف تحت نقطة إعادة الطلب",
-      value: formatNumber(metrics.inventory.lowStockCount, 0, "ar-EG"),
+      label: t.dashboard.lowStockItems,
+      value: formatNumber(metrics.inventory.lowStockCount, 0),
       icon: "alertTriangle",
-      footer: `بقيمة ${money(metrics.inventory.lowStockValue)}`,
+      footer: t.dashboard.lowStockFooter(money(metrics.inventory.lowStockValue)),
     },
   ];
 
   const operationalKpis: KpiCardProps[] = [
     {
-      label: "طلبات بيع مفتوحة",
-      value: formatNumber(openSalesOrders, 0, "ar-EG"),
+      label: t.dashboard.openSalesOrders,
+      value: formatNumber(openSalesOrders, 0),
       icon: "shoppingCart",
-      hint: "مسودة + مؤكدة (كل الفترات)",
+      hint: t.dashboard.openSalesOrdersHint,
     },
     {
-      label: "طلبات شراء مفتوحة",
-      value: formatNumber(openPurchaseOrders, 0, "ar-EG"),
+      label: t.dashboard.openPurchaseOrders,
+      value: formatNumber(openPurchaseOrders, 0),
       icon: "truck",
-      hint: "مسودة + تم الطلب (كل الفترات)",
+      hint: t.dashboard.openPurchaseOrdersHint,
     },
     {
-      label: "الكمية المُنتجة",
-      value: formatNumber(metrics.window.productionQty, 0, "ar-EG"),
+      label: t.dashboard.producedQty,
+      value: formatNumber(metrics.window.productionQty, 0),
       icon: "factory",
       deltaPct: d.productionQty.deltaPct,
-      footer: `${formatNumber(metrics.window.completedWorkOrders, 0, "ar-EG")} أمر إنتاج مكتمل`,
+      footer: t.dashboard.producedFooter(formatNumber(metrics.window.completedWorkOrders, 0)),
     },
     {
-      label: "نسبة نجاح اختبارات المعمل",
+      label: t.dashboard.labPassRate,
       value: formatPercent(metrics.window.labPassRatePct),
       icon: "lab",
       deltaPct: d.labPassRatePct.deltaPct,
-      footer: `${formatNumber(metrics.window.labPassed, 0, "ar-EG")} من ${formatNumber(metrics.window.labTotal, 0, "ar-EG")} اختبار`,
+      footer: t.dashboard.labPassRateFooter(
+        formatNumber(metrics.window.labPassed, 0),
+        formatNumber(metrics.window.labTotal, 0),
+      ),
     },
   ];
 
@@ -148,22 +156,22 @@ export default async function DashboardPage({
       <OfflineBanner />
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">لوحة التحكم</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t.nav.dashboard}</h1>
           <p className="text-sm text-muted-foreground">
-            <span>تحليل مالي وتشغيلي تفصيلي للمصنع</span>{" — "}
+            <span>{t.dashboard.tagline}</span>{" — "}
             <span className="tabular-nums">{formatRangeLabel(range)}</span>
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-          <Badge variant="outline">العملة: {DEFAULT_CURRENCY}</Badge>
-          <Badge variant="outline">الفترة السابقة للمقارنة متاحة</Badge>
+          <Badge variant="outline">{t.dashboard.currency}: {DEFAULT_CURRENCY}</Badge>
+          <Badge variant="outline">{t.dashboard.previousAvailable}</Badge>
         </div>
       </div>
 
       <DateRangeFilter fallbackFrom={earliest?.toISOString()} />
 
       <section className="space-y-3">
-        <SectionHeading title="المؤشرات المالية" description="الإيرادات والتكاليف والربح خلال الفترة المختارة" />
+        <SectionHeading title={t.dashboard.financialSection} description={t.dashboard.financialSectionHint} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {financialKpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
         </div>
@@ -189,7 +197,7 @@ export default async function DashboardPage({
       </section>
 
       <section className="space-y-3">
-        <SectionHeading title="نسب المساهمة في المبيعات" description="توزيع الإيرادات على الأصناف والعملاء والموردين" />
+        <SectionHeading title={t.dashboard.shareSection} description={t.dashboard.shareSectionHint} />
         <div className="grid gap-4 lg:grid-cols-2">
           <SalesShareByProductChart data={metrics.productShare} />
           <SalesShareByCustomerChart data={metrics.customerShare} />
@@ -198,27 +206,27 @@ export default async function DashboardPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>تحليل الربحية حسب الصنف</CardTitle>
-          <CardDescription>الإيراد والتكلفة والربح ونسبة المساهمة لكل صنف في الفترة المختارة</CardDescription>
+          <CardTitle>{t.dashboard.productProfitTitle}</CardTitle>
+          <CardDescription>{t.dashboard.productProfitHint}</CardDescription>
         </CardHeader>
         <CardContent>
           {metrics.products.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              لا توجد مبيعات في الفترة المختارة. جرّب توسيع نطاق التاريخ.
+              {t.dashboard.noSalesInRange}
             </p>
           ) : (
             <div className="overflow-x-auto rounded-lg border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>الصنف</TableHead>
-                    <TableHead>الوحدات</TableHead>
-                    <TableHead>الإيراد</TableHead>
-                    <TableHead>التكلفة</TableHead>
-                    <TableHead>الربح</TableHead>
-                    <TableHead>الهامش</TableHead>
-                    <TableHead>حصة الإيراد</TableHead>
-                    <TableHead>متوسط سعر البيع</TableHead>
+                    <TableHead>{t.common.item}</TableHead>
+                    <TableHead>{t.dashboard.units}</TableHead>
+                    <TableHead>{t.common.revenue}</TableHead>
+                    <TableHead>{t.common.cost}</TableHead>
+                    <TableHead>{t.dashboard.profit}</TableHead>
+                    <TableHead>{t.dashboard.margin}</TableHead>
+                    <TableHead>{t.dashboard.revenueShare}</TableHead>
+                    <TableHead>{t.dashboard.avgSellingPrice}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -228,7 +236,7 @@ export default async function DashboardPage({
                         <div className="font-medium">{product.name}</div>
                         <div className="font-mono text-xs text-muted-foreground">{product.sku}</div>
                       </TableCell>
-                      <TableCell className="tabular-nums">{formatNumber(product.unitsSold, 0, "ar-EG")} {product.unit}</TableCell>
+                      <TableCell className="tabular-nums">{formatNumber(product.unitsSold, 0)} {product.unit}</TableCell>
                       <TableCell className="tabular-nums font-medium">{money(product.revenue)}</TableCell>
                       <TableCell className="tabular-nums text-muted-foreground">{money(product.cogs)}</TableCell>
                       <TableCell className={cnProfit(product.profit)}>{money(product.profit)}</TableCell>
@@ -256,25 +264,25 @@ export default async function DashboardPage({
       <section className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>أداء العملاء</CardTitle>
-            <CardDescription>الإيراد والربح وحصة كل عميل</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {metrics.customers.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">لا يوجد عملاء في الفترة المختارة.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>العميل</TableHead>
-                      <TableHead>الطلبات</TableHead>
-                      <TableHead>الإيراد</TableHead>
-                      <TableHead>الربح</TableHead>
-                      <TableHead>الهامش</TableHead>
-                      <TableHead>الحصة</TableHead>
-                    </TableRow>
-                  </TableHeader>
+<CardTitle>{t.dashboard.customerPerformanceTitle}</CardTitle>
+          <CardDescription>{t.dashboard.customerPerformanceHint}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {metrics.customers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.noCustomersInRange}</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.common.customer}</TableHead>
+                    <TableHead>{t.dashboard.orders}</TableHead>
+                    <TableHead>{t.common.revenue}</TableHead>
+                    <TableHead>{t.dashboard.profit}</TableHead>
+                    <TableHead>{t.dashboard.margin}</TableHead>
+                    <TableHead>{t.common.share}</TableHead>
+                  </TableRow>
+                </TableHeader>
                   <TableBody>
                     {metrics.customers.map((customer) => (
                       <TableRow key={customer.name}>
@@ -284,7 +292,7 @@ export default async function DashboardPage({
                             {customer.name}
                           </div>
                         </TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(customer.orderCount, 0, "ar-EG")}</TableCell>
+                        <TableCell className="tabular-nums">{formatNumber(customer.orderCount, 0)}</TableCell>
                         <TableCell className="tabular-nums">{money(customer.revenue)}</TableCell>
                         <TableCell className={cnProfit(customer.profit)}>{money(customer.profit)}</TableCell>
                         <TableCell><MarginBadge value={customer.marginPct} /></TableCell>
@@ -300,28 +308,28 @@ export default async function DashboardPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>أداء الموردين</CardTitle>
-            <CardDescription>قيمة المشتريات وحصة كل مورد</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {metrics.suppliers.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">لا توجد مشتريات في الفترة المختارة.</p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>المورد</TableHead>
-                      <TableHead>الطلبات</TableHead>
-                      <TableHead>قيمة المشتريات</TableHead>
-                      <TableHead>الحصة</TableHead>
-                    </TableRow>
-                  </TableHeader>
+<CardTitle>{t.dashboard.supplierPerformanceTitle}</CardTitle>
+          <CardDescription>{t.dashboard.supplierPerformanceHint}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {metrics.suppliers.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.noPurchasesInRange}</p>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t.common.supplier}</TableHead>
+                    <TableHead>{t.dashboard.orders}</TableHead>
+                    <TableHead>{t.dashboard.purchasesValue}</TableHead>
+                    <TableHead>{t.common.share}</TableHead>
+                  </TableRow>
+                </TableHeader>
                   <TableBody>
                     {metrics.suppliers.map((supplier) => (
                       <TableRow key={supplier.name}>
                         <TableCell className="font-medium">{supplier.name}</TableCell>
-                        <TableCell className="tabular-nums">{formatNumber(supplier.orderCount, 0, "ar-EG")}</TableCell>
+                        <TableCell className="tabular-nums">{formatNumber(supplier.orderCount, 0)}</TableCell>
                         <TableCell className="tabular-nums">{money(supplier.purchases)}</TableCell>
                         <TableCell className="tabular-nums">{formatPercent(supplier.sharePct)}</TableCell>
                       </TableRow>
@@ -335,7 +343,7 @@ export default async function DashboardPage({
       </section>
 
       <section className="space-y-3">
-        <SectionHeading title="مؤشرات تشغيلية" description="الإنتاج والمخزون وحالات الطلبات" />
+        <SectionHeading title={t.dashboard.operationalSection} description={t.dashboard.operationalSectionHint} />
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {operationalKpis.map((kpi) => <KpiCard key={kpi.label} {...kpi} />)}
         </div>
@@ -344,17 +352,17 @@ export default async function DashboardPage({
           <InventoryByTypeChart data={snapshot.byType} />
           <Card>
             <CardHeader>
-              <CardTitle>حالات طلبات البيع</CardTitle>
-              <CardDescription>توزيع الطلبات وقيمتها خلال الفترة</CardDescription>
+              <CardTitle>{t.dashboard.salesStatusTitle}</CardTitle>
+              <CardDescription>{t.dashboard.salesStatusHint}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
               {metrics.salesByStatus.length === 0 ? (
-                <p className="py-6 text-center text-sm text-muted-foreground">لا توجد طلبات في الفترة المختارة.</p>
+                <p className="py-6 text-center text-sm text-muted-foreground">{t.dashboard.noOrdersInRange}</p>
               ) : metrics.salesByStatus.map((status) => (
                 <div key={status.status} className="flex items-center justify-between gap-2 text-sm">
                   <span className="flex items-center gap-2">
                     <Badge variant={status.status === "CANCELLED" ? "destructive" : "secondary"}>{status.label}</Badge>
-                    <span className="tabular-nums text-xs text-muted-foreground">{formatNumber(status.count, 0, "ar-EG")} طلب</span>
+                    <span className="tabular-nums text-xs text-muted-foreground">{formatNumber(status.count, 0)} {t.dashboard.requests}</span>
                   </span>
                   <span className="tabular-nums font-medium">{money(status.value)}</span>
                 </div>
@@ -371,18 +379,18 @@ export default async function DashboardPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>أعلى الأصناف قيمة في المخزون</CardTitle>
-          <CardDescription>قيمة المخزون بالتكلفة وحصة كل صنف</CardDescription>
+          <CardTitle>{t.dashboard.topInventoryTitle}</CardTitle>
+          <CardDescription>{t.dashboard.topInventoryHint}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>الصنف</TableHead>
-                  <TableHead>الكمية</TableHead>
-                  <TableHead>قيمة المخزون</TableHead>
-                  <TableHead>الحصة من المخزون</TableHead>
+                  <TableHead>{t.common.item}</TableHead>
+                  <TableHead>{t.dashboard.inventoryQty}</TableHead>
+                  <TableHead>{t.dashboard.inventoryValue}</TableHead>
+                  <TableHead>{t.dashboard.inventoryShare}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -397,7 +405,7 @@ export default async function DashboardPage({
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="tabular-nums">{formatNumber(row.qty, 0, "ar-EG")}</TableCell>
+                    <TableCell className="tabular-nums">{formatNumber(row.qty, 0)}</TableCell>
                     <TableCell className="tabular-nums font-medium">{money(row.value)}</TableCell>
                     <TableCell className="tabular-nums">{formatPercent(row.sharePct)}</TableCell>
                   </TableRow>

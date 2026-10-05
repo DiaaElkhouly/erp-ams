@@ -5,6 +5,7 @@ import {
   formatRangeLabel, previousPeriod,
 } from "@/lib/date-range";
 import { DEFAULT_CURRENCY, formatDate, formatMoney, formatNumber, formatPercent, percentChange } from "@/lib/utils";
+import type { Messages } from "@/lib/i18n-messages";
 
 /**
  * A report suite is a renderer-agnostic description of every report on the page:
@@ -52,55 +53,24 @@ export type ReportSuite = {
   sections: ReportSection[];
 };
 
-export const REPORT_TITLE = "تقرير شامل — نظام التصنيع المتكامل";
-
-const ITEM_TYPE_LABELS: Record<string, string> = {
-  RAW_MATERIAL: "مواد خام",
-  COMPONENT: "مكونات",
-  FINISHED_GOOD: "منتجات نهائية",
-  CONSUMABLE: "مستهلكات",
-};
-
-const SALES_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة",
-  CONFIRMED: "مؤكد",
-  FULFILLED: "منفذ",
-  CANCELLED: "ملغى",
-};
-
-const PURCHASE_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة",
-  ORDERED: "تم الطلب",
-  RECEIVED: "تم استلامه",
-  CANCELLED: "ملغى",
-};
-
-const WORK_ORDER_STATUS_LABELS: Record<string, string> = {
-  PLANNED: "مخطط",
-  RELEASED: "مُعتمد",
-  IN_PROGRESS: "قيد التنفيذ",
-  COMPLETED: "مكتمل",
-  CANCELLED: "ملغى",
-};
-
-const LAB_STATUS_LABELS: Record<string, string> = {
-  PASS: "مطابق",
-  REVIEW: "قيد المراجعة",
-  FAIL: "غير مطابق",
-};
-
-const LAB_CATEGORY_LABELS: Record<string, string> = {
-  cement: "أسمنت",
-  "aggregate-physical": "ركام — خواص فيزيائية",
-  water: "مياه",
-  fresh: "الخلطة الطازجة",
-  block: "بلوك",
-  brick: "طوب",
-  paver: "إنترلوك",
-  hardened: "خرسانة متصلدة",
-};
-
-const GRANULARITY_LABELS: Record<string, string> = { day: "يومي", week: "أسبوعي", month: "شهري" };
+/**
+ * Status and enum labels come from the catalog so a suite is written once in the
+ * user's language instead of baking Arabic into the query layer.
+ */
+function enumLabels(t: Messages) {
+  return {
+    itemType: t.itemType as Record<string, string>,
+    sales: { DRAFT: t.status.DRAFT, CONFIRMED: t.status.CONFIRMED, FULFILLED: t.status.FULFILLED, CANCELLED: t.status.CANCELLED } as Record<string, string>,
+    purchase: { DRAFT: t.status.DRAFT, ORDERED: t.status.ORDERED, RECEIVED: t.status.RECEIVED, CANCELLED: t.status.CANCELLED } as Record<string, string>,
+    workOrder: {
+      PLANNED: t.status.PLANNED, RELEASED: t.status.RELEASED, IN_PROGRESS: t.status.IN_PROGRESS,
+      COMPLETED: t.status.COMPLETED, CANCELLED: t.status.CANCELLED,
+    } as Record<string, string>,
+    lab: t.labStatus as Record<string, string>,
+    labCategory: t.reports.labCategory as Record<string, string>,
+    granularity: t.reports.granularity as Record<string, string>,
+  };
+}
 
 const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -114,9 +84,9 @@ export function formatReportCell(value: ReportCell, kind: ReportColumnKind): str
     case "percent":
       return formatPercent(Number(value));
     case "integer":
-      return formatNumber(Number(value), 0, "ar-EG");
+      return formatNumber(Number(value), 0);
     case "decimal":
-      return formatNumber(Number(value), 2, "ar-EG");
+      return formatNumber(Number(value), 2);
     case "date":
       return value instanceof Date ? formatDate(value) : String(value);
     default:
@@ -128,14 +98,15 @@ function label(key: string, text: string, kind: ReportColumnKind = "text"): Repo
   return { key, label: text, kind };
 }
 
-function stockStatusLabel(onHand: number, reorderPoint: number) {
-  if (onHand === 0) return "نفد المخزون";
-  if (reorderPoint > 0 && onHand <= reorderPoint / 2) return "حرج — يحتاج توريد عاجل";
-  return "منخفض — عند حد إعادة الطلب";
+function stockStatusLabel(onHand: number, reorderPoint: number, t: Messages) {
+  if (onHand === 0) return t.reports.levels.outOfStock;
+  if (reorderPoint > 0 && onHand <= reorderPoint / 2) return t.reports.levels.critical;
+  return t.reports.levels.low;
 }
 
-export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
+export async function getReportSuite(range: DateRange, t: Messages): Promise<ReportSuite> {
   const prev = previousPeriod(range);
+  const labels = enumLabels(t);
 
   const [
     current,
@@ -332,10 +303,10 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
       title,
       description,
       columns: [
-        label("status", "الحالة"),
-        label("count", "عدد الطلبات", "integer"),
-        label("value", "القيمة", "money"),
-        label("share", "الحصة", "percent"),
+        label("status", t.reports.columns.status),
+        label("count", t.reports.columns.orderCount, "integer"),
+        label("value", t.reports.columns.value, "money"),
+        label("share", t.common.share, "percent"),
       ],
       rows: [...map.entries()]
         .map(([status, entry]) => ({
@@ -384,7 +355,7 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     const cogs = round2(bucket?.cogs ?? 0);
     const purchases = round2(bucket?.purchases ?? 0);
     return {
-      period: bucketLabel(date, range.granularity),
+      period: bucketLabel(date, range.granularity, { week: t.weekPrefix }),
       salesOrders: bucket?.salesOrders ?? 0,
       unitsSold: bucket?.unitsSold ?? 0,
       revenue,
@@ -412,41 +383,41 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
 
   // --- summary metrics -----------------------------------------------------
   const metrics: ReportMetric[] = [
-    { id: "revenue", label: "إجمالي الإيرادات", value: window.revenue, kind: "money", deltaPct: percentChange(window.revenue, prevWindow.revenue), hint: `${window.salesOrderCount} طلب بيع` },
-    { id: "cogs", label: "تكلفة البضاعة المباعة", value: window.cogs, kind: "money", deltaPct: percentChange(window.cogs, prevWindow.cogs), hint: `${window.unitsSold} وحدة مباعة` },
-    { id: "grossProfit", label: "مجمل الربح", value: window.grossProfit, kind: "money", deltaPct: percentChange(window.grossProfit, prevWindow.grossProfit), hint: `${formatPercent(window.grossMarginPct)} من الإيرادات` },
-    { id: "purchases", label: "قيمة المشتريات", value: window.purchases, kind: "money", deltaPct: percentChange(window.purchases, prevWindow.purchases), hint: `${window.purchaseOrderCount} طلب شراء` },
-    { id: "netCashFlow", label: "صافي التدفق النقدي", value: window.netCashFlow, kind: "money", deltaPct: percentChange(window.netCashFlow, prevWindow.netCashFlow), hint: `تحصيل ${formatPercent(window.cashConversionPct)}` },
-    { id: "inventoryValue", label: "قيمة المخزون", value: inventoryValue, kind: "money", deltaPct: null, hint: `${inventoryRows.length} صنف` },
-    { id: "lowStock", label: "أصناف تحت إعادة الطلب", value: lowStockRows.length, kind: "integer", deltaPct: null, hint: "بحاجة إلى توريد" },
-    { id: "productionQty", label: "الكمية المُنتجة", value: window.productionQty, kind: "integer", deltaPct: percentChange(window.productionQty, prevWindow.productionQty), hint: `${window.completedWorkOrders} أمر إنتاج مكتمل` },
-    { id: "labPassRate", label: "نسبة نجاح اختبارات المعمل", value: window.labPassRatePct, kind: "percent", deltaPct: percentChange(window.labPassRatePct, prevWindow.labPassRatePct), hint: `${window.labPassed} من ${window.labTotal}` },
-    { id: "avgOrderValue", label: "متوسط قيمة طلب البيع", value: window.avgOrderValue, kind: "money", deltaPct: percentChange(window.avgOrderValue, prevWindow.avgOrderValue), hint: `${window.distinctCustomers} عميل` },
+    { id: "revenue", label: t.dashboard.revenue, value: window.revenue, kind: "money", deltaPct: percentChange(window.revenue, prevWindow.revenue), hint: t.reports.metricHints.salesOrders(String(window.salesOrderCount)) },
+    { id: "cogs", label: t.dashboard.cogs, value: window.cogs, kind: "money", deltaPct: percentChange(window.cogs, prevWindow.cogs), hint: t.reports.metricHints.unitsSold(String(window.unitsSold)) },
+    { id: "grossProfit", label: t.dashboard.grossProfit, value: window.grossProfit, kind: "money", deltaPct: percentChange(window.grossProfit, prevWindow.grossProfit), hint: t.reports.metricHints.ofRevenue(formatPercent(window.grossMarginPct)) },
+    { id: "purchases", label: t.dashboard.purchasesValue, value: window.purchases, kind: "money", deltaPct: percentChange(window.purchases, prevWindow.purchases), hint: t.reports.metricHints.purchaseOrders(String(window.purchaseOrderCount)) },
+    { id: "netCashFlow", label: t.dashboard.netCashFlow, value: window.netCashFlow, kind: "money", deltaPct: percentChange(window.netCashFlow, prevWindow.netCashFlow), hint: t.reports.metricHints.collected(formatPercent(window.cashConversionPct)) },
+    { id: "inventoryValue", label: t.dashboard.inventoryValue, value: inventoryValue, kind: "money", deltaPct: null, hint: t.reports.metricHints.itemCount(String(inventoryRows.length)) },
+    { id: "lowStock", label: t.dashboard.lowStockItems, value: lowStockRows.length, kind: "integer", deltaPct: null, hint: t.reports.metricHints.needsRestock },
+    { id: "productionQty", label: t.dashboard.producedQty, value: window.productionQty, kind: "integer", deltaPct: percentChange(window.productionQty, prevWindow.productionQty), hint: t.reports.metricHints.completedWorkOrders(String(window.completedWorkOrders)) },
+    { id: "labPassRate", label: t.dashboard.labPassRate, value: window.labPassRatePct, kind: "percent", deltaPct: percentChange(window.labPassRatePct, prevWindow.labPassRatePct), hint: t.reports.metricHints.testsOf(String(window.labPassed), String(window.labTotal)) },
+    { id: "avgOrderValue", label: t.reports.reorder.avgOrderValue, value: window.avgOrderValue, kind: "money", deltaPct: percentChange(window.avgOrderValue, prevWindow.avgOrderValue), hint: t.reports.metricHints.distinctCustomers(String(window.distinctCustomers)) },
   ];
 
   const sections: ReportSection[] = [
     {
       id: "inventory-valuation",
-      title: "تقييم المخزون",
-      description: `قيمة الأرصدة الحالية بالتكلفة وسعر البيع وحصة كل صنف من إجمالي المخزون (${formatRangeLabel(range)})`,
+      title: t.reports.valuation.title,
+      description: `${t.reports.valuation.atCost}, ${t.reports.valuation.atSale} (${formatRangeLabel(range)})`,
       columns: [
-        label("sku", "رمز الصنف"),
-        label("name", "اسم الصنف"),
-        label("type", "النوع"),
-        label("unit", "الوحدة"),
-        label("onHand", "الرصيد الحالي", "integer"),
-        label("cost", "سعر التكلفة", "money"),
-        label("salePrice", "سعر البيع", "money"),
-        label("value", "قيمة المخزون بالتكلفة", "money"),
-        label("retailValue", "قيمة المخزون بسعر البيع", "money"),
-        label("share", "الحصة من المخزون", "percent"),
+        label("sku", t.reports.columns.sku),
+        label("name", t.reports.columns.itemName),
+        label("type", t.reports.columns.itemType),
+        label("unit", t.reports.columns.unit),
+        label("onHand", t.reports.columns.onHand, "integer"),
+        label("cost", t.reports.columns.costPrice, "money"),
+        label("salePrice", t.reports.columns.salePrice, "money"),
+        label("value", t.reports.columns.atCost, "money"),
+        label("retailValue", t.reports.columns.atSale, "money"),
+        label("share", t.reports.columns.inventoryShare, "percent"),
       ],
       rows: [...inventoryRows]
         .sort((a, b) => b.value - a.value)
         .map((row) => ({
           sku: row.sku,
           name: row.name,
-          type: ITEM_TYPE_LABELS[row.type] ?? row.type,
+          type: labels.itemType[row.type] ?? row.type,
           unit: row.unit,
           onHand: row.onHand,
           cost: row.cost,
@@ -458,45 +429,45 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "low-stock",
-      title: "تقرير المخزون المنخفض",
-      description: "الأصناف عند نقطة إعادة الطلب المحددة أو أقل مع حجم العجز وقيمة التوريد المطلوبة",
+      title: t.reports.reorder.title,
+      description: t.reports.reorder.hint,
       columns: [
-        label("sku", "رمز الصنف"),
-        label("name", "اسم الصنف"),
-        label("type", "النوع"),
-        label("unit", "الوحدة"),
-        label("onHand", "المتاح", "integer"),
-        label("reorderPoint", "نقطة إعادة الطلب", "integer"),
-        label("reorderQty", "كمية إعادة الطلب", "integer"),
-        label("shortage", "العجز", "integer"),
-        label("shortageValue", "قيمة التوريد المطلوبة", "money"),
-        label("status", "الحالة"),
+        label("sku", t.reports.columns.sku),
+        label("name", t.reports.columns.itemName),
+        label("type", t.reports.columns.itemType),
+        label("unit", t.reports.columns.unit),
+        label("onHand", t.reports.columns.available, "integer"),
+        label("reorderPoint", t.reports.columns.reorderPoint, "integer"),
+        label("reorderQty", t.reports.columns.reorderQuantity, "integer"),
+        label("shortage", t.reports.columns.shortfall, "integer"),
+        label("shortageValue", t.reports.columns.reorderValue, "money"),
+        label("status", t.reports.columns.status),
       ],
       rows: lowStockRows.map((row) => ({
         sku: row.sku,
         name: row.name,
-        type: ITEM_TYPE_LABELS[row.type] ?? row.type,
+        type: labels.itemType[row.type] ?? row.type,
         unit: row.unit,
         onHand: row.onHand,
         reorderPoint: row.reorderPoint,
         reorderQty: row.reorderQty,
         shortage: row.shortage,
         shortageValue: round2(row.shortage * row.cost),
-        status: stockStatusLabel(row.onHand, row.reorderPoint),
+        status: stockStatusLabel(row.onHand, row.reorderPoint, t),
       })),
     },
     {
       id: "stock-by-warehouse",
-      title: "المخزون حسب المستودع",
-      description: "توزيع الأرصدة وقيمتها على مواقع التخزين",
+      title: t.reports.byWarehouse.title,
+      description: t.reports.byWarehouse.hint,
       columns: [
-        label("code", "رمز المستودع"),
-        label("name", "اسم المستودع"),
-        label("location", "الموقع"),
-        label("skus", "عدد الأصناف", "integer"),
-        label("qty", "إجمالي الكمية", "integer"),
-        label("value", "قيمة المخزون", "money"),
-        label("share", "الحصة من المخزون", "percent"),
+        label("code", t.reports.columns.warehouseCode),
+        label("name", t.reports.columns.warehouseName),
+        label("location", t.reports.columns.location),
+        label("skus", t.reports.columns.itemCount, "integer"),
+        label("qty", t.reports.columns.totalQuantity, "integer"),
+        label("value", t.reports.columns.value, "money"),
+        label("share", t.reports.columns.inventoryShare, "percent"),
       ],
       rows: warehouseRows.map((row) => ({
         code: row.code,
@@ -510,19 +481,19 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "sales-by-item",
-      title: "المبيعات والربحية حسب الصنف",
-      description: "الإيراد والتكلفة والربح والهامش لكل صنف خلال الفترة المختارة",
+      title: t.reports.salesByItem.title,
+      description: t.reports.salesByItem.hint,
       columns: [
-        label("sku", "رمز الصنف"),
-        label("name", "اسم الصنف"),
-        label("unit", "الوحدة"),
-        label("unitsSold", "الوحدات المباعة", "integer"),
-        label("revenue", "الإيراد", "money"),
-        label("cogs", "التكلفة", "money"),
-        label("profit", "الربح", "money"),
-        label("margin", "الهامش", "percent"),
-        label("share", "حصة الإيراد", "percent"),
-        label("avgPrice", "متوسط سعر البيع", "money"),
+        label("sku", t.reports.columns.sku),
+        label("name", t.reports.columns.itemName),
+        label("unit", t.reports.columns.unit),
+        label("unitsSold", t.reports.columns.unitsSold, "integer"),
+        label("revenue", t.common.revenue, "money"),
+        label("cogs", t.common.cost, "money"),
+        label("profit", t.reports.columns.profit, "money"),
+        label("margin", t.reports.columns.margin, "percent"),
+        label("share", t.reports.columns.revenueShare, "percent"),
+        label("avgPrice", t.reports.columns.avgPrice, "money"),
       ],
       rows: current.agg.productList.map((row) => ({
         sku: row.sku,
@@ -539,17 +510,17 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "sales-by-customer",
-      title: "أداء العملاء",
-      description: "عدد الطلبات والإيراد والربح وحصة كل عميل خلال الفترة المختارة",
+      title: t.reports.salesByCustomer.title,
+      description: t.reports.salesByCustomer.hint,
       columns: [
-        label("name", "العميل"),
-        label("orders", "عدد الطلبات", "integer"),
-        label("units", "الوحدات", "integer"),
-        label("revenue", "الإيراد", "money"),
-        label("cost", "التكلفة", "money"),
-        label("profit", "الربح", "money"),
-        label("margin", "الهامش", "percent"),
-        label("share", "الحصة من الإيراد", "percent"),
+        label("name", t.common.customer),
+        label("orders", t.reports.columns.orderCount, "integer"),
+        label("units", t.dashboard.units, "integer"),
+        label("revenue", t.common.revenue, "money"),
+        label("cost", t.common.cost, "money"),
+        label("profit", t.reports.columns.profit, "money"),
+        label("margin", t.reports.columns.margin, "percent"),
+        label("share", t.reports.columns.revenueShare, "percent"),
       ],
       rows: current.agg.customerList.map((row) => ({
         name: row.name,
@@ -564,13 +535,13 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "purchases-by-supplier",
-      title: "أداء الموردين",
-      description: "عدد أوامر الشراء وقيمة المشتريات وحصة كل مورد خلال الفترة المختارة",
+      title: t.reports.purchasesBySupplier.title,
+      description: t.reports.purchasesBySupplier.hint,
       columns: [
-        label("name", "المورد"),
-        label("orders", "عدد الأوامر", "integer"),
-        label("purchases", "قيمة المشتريات", "money"),
-        label("share", "الحصة من المشتريات", "percent"),
+        label("name", t.common.supplier),
+        label("orders", t.reports.columns.orderCount, "integer"),
+        label("purchases", t.dashboard.purchasesValue, "money"),
+        label("share", t.reports.columns.purchaseShare, "percent"),
       ],
       rows: current.agg.supplierList.map((row) => ({
         name: row.name,
@@ -579,26 +550,26 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
         share: round2(row.sharePct),
       })),
     },
-    statusSection("sales-order-status", "طلبات البيع حسب الحالة", "توزيع طلبات البيع على حالاتها مع قيمة كل حالة", SALES_STATUS_LABELS, salesStatusMap),
-    statusSection("purchase-order-status", "طلبات الشراء حسب الحالة", "توزيع طلبات الشراء على حالاتها مع قيمة كل حالة", PURCHASE_STATUS_LABELS, purchaseStatusMap),
+    statusSection("sales-order-status", t.reports.orderStatus.salesTitle, t.reports.orderStatus.salesHint, labels.sales, salesStatusMap),
+    statusSection("purchase-order-status", t.reports.orderStatus.purchaseTitle, t.reports.orderStatus.purchaseHint, labels.purchase, purchaseStatusMap),
     {
       id: "sales-order-detail",
-      title: "تفاصيل طلبات البيع",
-      description: "كل طلبات البيع المسجلة خلال الفترة المختارة",
+      title: t.reports.salesDetail.title,
+      description: t.reports.salesDetail.hint,
       columns: [
-        label("orderNumber", "رقم الطلب"),
-        label("orderDate", "تاريخ الطلب", "date"),
-        label("party", "العميل"),
-        label("status", "الحالة"),
-        label("lines", "عدد البنود", "integer"),
-        label("qty", "الكمية", "integer"),
-        label("value", "قيمة الطلب", "money"),
+        label("orderNumber", t.reports.columns.orderNumber),
+        label("orderDate", t.reports.columns.orderDate, "date"),
+        label("party", t.common.customer),
+        label("status", t.reports.columns.status),
+        label("lines", t.reports.columns.lineCount, "integer"),
+        label("qty", t.reports.columns.qty, "integer"),
+        label("value", t.reports.columns.orderValue, "money"),
       ],
       rows: salesDetail.map((row) => ({
         orderNumber: row.orderNumber,
         orderDate: row.orderDate,
         party: row.party,
-        status: SALES_STATUS_LABELS[row.status] ?? row.status,
+        status: labels.sales[row.status] ?? row.status,
         lines: row.lines,
         qty: row.qty,
         value: row.value,
@@ -606,22 +577,22 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "purchase-order-detail",
-      title: "تفاصيل طلبات الشراء",
-      description: "كل طلبات الشراء المسجلة خلال الفترة المختارة",
+      title: t.reports.purchaseDetail.title,
+      description: t.reports.purchaseDetail.hint,
       columns: [
-        label("orderNumber", "رقم الطلب"),
-        label("orderDate", "تاريخ الطلب", "date"),
-        label("party", "المورد"),
-        label("status", "الحالة"),
-        label("lines", "عدد البنود", "integer"),
-        label("qty", "الكمية", "integer"),
-        label("value", "قيمة الطلب", "money"),
+        label("orderNumber", t.reports.columns.orderNumber),
+        label("orderDate", t.reports.columns.orderDate, "date"),
+        label("party", t.common.supplier),
+        label("status", t.reports.columns.status),
+        label("lines", t.reports.columns.lineCount, "integer"),
+        label("qty", t.reports.columns.qty, "integer"),
+        label("value", t.reports.columns.orderValue, "money"),
       ],
       rows: purchaseDetail.map((row) => ({
         orderNumber: row.orderNumber,
         orderDate: row.orderDate,
         party: row.party,
-        status: PURCHASE_STATUS_LABELS[row.status] ?? row.status,
+        status: labels.purchase[row.status] ?? row.status,
         lines: row.lines,
         qty: row.qty,
         value: row.value,
@@ -629,25 +600,25 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "work-orders",
-      title: "أوامر الإنتاج",
-      description: "أوامر الإنتاج التي بدأت أو استحققت أو اكتملت خلال الفترة المختارة",
+      title: t.reports.workOrders.title,
+      description: t.reports.workOrders.hint,
       columns: [
-        label("orderNumber", "رقم الأمر"),
-        label("item", "الصنف"),
-        label("sku", "رمز الصنف"),
-        label("warehouse", "المستودع"),
-        label("status", "الحالة"),
-        label("quantity", "الكمية", "integer"),
-        label("startDate", "تاريخ البدء", "date"),
-        label("dueDate", "تاريخ الاستحقاق", "date"),
-        label("completedAt", "تاريخ الإكمال", "date"),
+        label("orderNumber", t.reports.columns.workOrderNumber),
+        label("item", t.reports.columns.itemColumn),
+        label("sku", t.reports.columns.sku),
+        label("warehouse", t.reports.columns.warehouseColumn),
+        label("status", t.reports.columns.status),
+        label("quantity", t.reports.columns.qty, "integer"),
+        label("startDate", t.reports.columns.startDate, "date"),
+        label("dueDate", t.reports.columns.dueDate, "date"),
+        label("completedAt", t.reports.columns.completedAt, "date"),
       ],
       rows: workOrders.map((row) => ({
         orderNumber: row.orderNumber,
         item: row.item.name,
         sku: row.item.sku,
         warehouse: row.warehouse.name,
-        status: WORK_ORDER_STATUS_LABELS[row.status] ?? row.status,
+        status: labels.workOrder[row.status] ?? row.status,
         quantity: row.quantity,
         startDate: row.startDate,
         dueDate: row.dueDate,
@@ -656,39 +627,39 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "period-performance",
-      title: "الأداء خلال الزمن",
-      description: `تجميع ${GRANULARITY_LABELS[range.granularity]} للمبيعات والمشتريات والإنتاج ونتائج المعمل`,
+      title: t.reports.performance.title,
+      description: t.reports.performance.hint,
       columns: [
-        label("period", "الفترة"),
-        label("salesOrders", "طلبات البيع", "integer"),
-        label("unitsSold", "الوحدات المباعة", "integer"),
-        label("revenue", "الإيراد", "money"),
-        label("cogs", "التكلفة", "money"),
-        label("profit", "الربح", "money"),
-        label("margin", "الهامش", "percent"),
-        label("purchases", "المشتريات", "money"),
-        label("netCashFlow", "صافي التدفق النقدي", "money"),
-        label("productionQty", "الكمية المُنتجة", "integer"),
-        label("labPassed", "اختبارات ناجحة", "integer"),
-        label("labTotal", "إجمالي الاختبارات", "integer"),
+        label("period", t.reports.columns.period),
+        label("salesOrders", t.common.salesOrders, "integer"),
+        label("unitsSold", t.reports.columns.unitsSold, "integer"),
+        label("revenue", t.common.revenue, "money"),
+        label("cogs", t.common.cost, "money"),
+        label("profit", t.reports.columns.profit, "money"),
+        label("margin", t.reports.columns.margin, "percent"),
+        label("purchases", t.dashboard.purchasesValue, "money"),
+        label("netCashFlow", t.reports.columns.netCashFlow, "money"),
+        label("productionQty", t.reports.columns.producedQty, "integer"),
+        label("labPassed", t.reports.columns.testsPassed, "integer"),
+        label("labTotal", t.reports.columns.totalTests, "integer"),
       ],
       rows: trendRows,
     },
     {
       id: "lab-summary",
-      title: "ملخص نتائج المعمل",
-      description: "عدد الاختبارات وتوزيعها بين المطابق وقيد المراجعة وغير المطابق لكل تصنيف",
+      title: t.reports.lab.title,
+      description: t.reports.lab.hint,
       columns: [
-        label("category", "التصنيف"),
-        label("total", "إجمالي الاختبارات", "integer"),
-        label("pass", "مطابق", "integer"),
-        label("review", "قيد المراجعة", "integer"),
-        label("fail", "غير مطابق", "integer"),
-        label("passRate", "نسبة النجاح", "percent"),
+        label("category", t.reports.columns.category),
+        label("total", t.reports.columns.totalTests, "integer"),
+        label("pass", t.reports.columns.pass, "integer"),
+        label("review", t.reports.columns.review, "integer"),
+        label("fail", t.reports.columns.fail, "integer"),
+        label("passRate", t.reports.columns.passRate, "percent"),
       ],
       rows: [...labCategoryMap.entries()]
         .map(([category, entry]) => ({
-          category: LAB_CATEGORY_LABELS[category] ?? category,
+          category: labels.labCategory[category] ?? category,
           total: entry.total,
           pass: entry.pass,
           review: entry.review,
@@ -699,22 +670,22 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
     },
     {
       id: "lab-tests",
-      title: "تفاصيل اختبارات المعمل",
-      description: "كل الاختبارات المسجلة خلال الفترة المختارة مع النتائج والمعايير المرجعية",
+      title: t.reports.labDetail.title,
+      description: t.reports.labDetail.hint,
       columns: [
-        label("testedAt", "تاريخ الاختبار", "date"),
-        label("category", "التصنيف"),
-        label("material", "المادة"),
-        label("testName", "الاختبار"),
-        label("result", "النتيجة", "decimal"),
-        label("unit", "الوحدة"),
-        label("standard", "المعيار"),
-        label("limits", "الحد المسموح"),
-        label("status", "الحالة"),
+        label("testedAt", t.reports.columns.testDate, "date"),
+        label("category", t.reports.columns.category),
+        label("material", t.reports.columns.material),
+        label("testName", t.reports.columns.test),
+        label("result", t.reports.columns.result, "decimal"),
+        label("unit", t.reports.columns.unit),
+        label("standard", t.reports.columns.standard),
+        label("limits", t.reports.columns.allowedRange),
+        label("status", t.reports.columns.status),
       ],
       rows: labTests.map((row) => ({
         testedAt: row.testedAt,
-        category: LAB_CATEGORY_LABELS[row.category] ?? row.category,
+        category: labels.labCategory[row.category] ?? row.category,
         material: row.material,
         testName: row.testName,
         result: row.result,
@@ -723,13 +694,13 @@ export async function getReportSuite(range: DateRange): Promise<ReportSuite> {
         limits: row.minValue === null && row.maxValue === null
           ? "—"
           : `${row.minValue ?? "−∞"} — ${row.maxValue ?? "+∞"}`,
-        status: LAB_STATUS_LABELS[row.status] ?? row.status,
+        status: labels.lab[row.status] ?? row.status,
       })),
     },
   ];
 
   return {
-    title: REPORT_TITLE,
+    title: t.reports.reportTitle,
     rangeLabel: formatRangeLabel(range),
     from: range.from,
     to: range.to,

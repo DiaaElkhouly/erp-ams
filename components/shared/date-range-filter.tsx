@@ -7,35 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import {
   DateRange, DateRangeParams, formatRangeLabel, isPresetValid,
   resolveDateRange, resolvePreset, toDateInput, toTimeInput,
 } from "@/lib/date-range";
 
-type PresetOption = {
-  id: string;
-  label: string;
-};
+/** Keys into `t.dateRange.presets`, not labels: the strings live in the catalog. */
+const PRESET_IDS = [
+  "today", "yesterday", "7d", "30d", "90d",
+  "mtd", "lastMonth", "6m", "12m", "ytd", "all",
+] as const;
 
-const PRESETS: PresetOption[] = [
-  { id: "today", label: "اليوم" },
-  { id: "yesterday", label: "أمس" },
-  { id: "7d", label: "٧ أيام" },
-  { id: "30d", label: "٣٠ يوم" },
-  { id: "90d", label: "٩٠ يوم" },
-  { id: "mtd", label: "هذا الشهر" },
-  { id: "lastMonth", label: "الشهر الماضي" },
-  { id: "6m", label: "٦ أشهر" },
-  { id: "12m", label: "سنة" },
-  { id: "ytd", label: "منذ بداية السنة" },
-  { id: "all", label: "كل الفترات" },
-];
-
-const GRANULARITY_LABELS: Record<string, string> = {
-  day: "يومي",
-  week: "أسبوعي",
-  month: "شهري",
-};
+type PresetId = (typeof PRESET_IDS)[number];
 
 function readParams(searchParams: URLSearchParams): DateRangeParams {
   return {
@@ -48,6 +32,7 @@ function readParams(searchParams: URLSearchParams): DateRangeParams {
 }
 
 export function DateRangeFilter({ fallbackFrom }: { fallbackFrom?: string }) {
+  const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -101,37 +86,42 @@ export function DateRangeFilter({ fallbackFrom }: { fallbackFrom?: string }) {
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
           <CalendarDays className="h-4 w-4" />
-          الفترة الزمنية
+          {t.dateRange.label}
         </div>
         <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium">
           {formatRangeLabel(range)}
         </span>
         <span className="rounded-md bg-secondary px-2 py-1 text-xs text-muted-foreground">
-          {range.days} يوم · عرض {GRANULARITY_LABELS[range.granularity]}
+          {t.dateRange.daysAndGranularity
+            .replace("{days}", String(range.days))
+            .replace(
+              "{granularity}",
+              t.dateRange.granularity[range.granularity as keyof typeof t.dateRange.granularity],
+            )}
         </span>
       </div>
 
       <div className="flex flex-wrap gap-1.5">
-        {PRESETS.map((preset) => (
+        {PRESET_IDS.map((preset) => (
           <Button
-            key={preset.id}
+            key={preset}
             size="sm"
-            variant={activePreset === preset.id ? "default" : "outline"}
-            onClick={() => applyPreset(preset.id)}
-            className={cn(activePreset === preset.id && "shadow-sm")}
+            variant={activePreset === preset ? "default" : "outline"}
+            onClick={() => applyPreset(preset)}
+            className={cn(activePreset === preset && "shadow-sm")}
           >
-            {preset.label}
+            {t.dateRange.presets[preset]}
           </Button>
         ))}
-        <Button size="sm" variant="ghost" onClick={() => applyPreset("30d")} title="إعادة ضبط">
+        <Button size="sm" variant="ghost" onClick={() => applyPreset("30d")} title={t.dateRange.reset}>
           <RotateCcw className="h-3.5 w-3.5" />
-          إعادة ضبط
+          {t.dateRange.reset}
         </Button>
       </div>
 
       <div className="flex flex-wrap items-end gap-3 border-t pt-4">
         <div className="space-y-1.5">
-          <Label className="text-xs">من تاريخ</Label>
+          <Label className="text-xs">{t.dateRange.fromDate}</Label>
           <Input
             type="date"
             value={fromDate}
@@ -141,11 +131,11 @@ export function DateRangeFilter({ fallbackFrom }: { fallbackFrom?: string }) {
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">من وقت</Label>
+          <Label className="text-xs">{t.dateRange.fromTime}</Label>
           <Input type="time" value={fromTime} onChange={(e) => setFromTime(e.target.value)} className="w-32" />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">إلى تاريخ</Label>
+          <Label className="text-xs">{t.dateRange.toDate}</Label>
           <Input
             type="date"
             value={toDate}
@@ -155,12 +145,12 @@ export function DateRangeFilter({ fallbackFrom }: { fallbackFrom?: string }) {
           />
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">إلى وقت</Label>
+          <Label className="text-xs">{t.dateRange.toTime}</Label>
           <Input type="time" value={toTime} onChange={(e) => setToTime(e.target.value)} className="w-32" />
         </div>
         <Button onClick={applyCustom} disabled={!fromDate || !toDate}>
           <Clock className="h-4 w-4" />
-          تطبيق
+          {t.common.apply}
         </Button>
       </div>
     </div>

@@ -15,7 +15,11 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
+import { PartyTable } from "@/features/parties/components/party-table";
+import { usePartiesList } from "@/features/parties/hooks/use-parties";
+import { useItemsForPickers } from "@/features/bom/hooks/use-boms";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 const STATUS_VARIANT: Record<string, "secondary" | "default" | "success" | "destructive"> = {
   DRAFT: "secondary", CONFIRMED: "default", FULFILLED: "success", CANCELLED: "destructive",
@@ -23,51 +27,16 @@ const STATUS_VARIANT: Record<string, "secondary" | "default" | "success" | "dest
 const STATUS_FLOW: Record<string, string | null> = {
   DRAFT: "CONFIRMED", CONFIRMED: "FULFILLED", FULFILLED: null, CANCELLED: null,
 };
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة", CONFIRMED: "مؤكد", FULFILLED: "منفذ", CANCELLED: "ملغى",
-};
 
 function useSalesOrders() {
   return useQuery({ queryKey: ["sales-orders"], queryFn: () => fetch("/api/sales-orders").then((r) => r.json()) });
 }
-function useCustomers() {
-  return useQuery({ queryKey: ["customers"], queryFn: () => fetch("/api/customers").then((r) => r.json()) });
-}
-function useItemsList() {
-  return useQuery({ queryKey: ["items", ""], queryFn: () => fetch("/api/items?pageSize=200").then((r) => r.json()) });
-}
-
-function NewCustomerDialog() {
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "", address: "" });
-  const qc = useQueryClient();
-  const { mutate, isPending } = useMutation({
-    mutationFn: () => fetch("/api/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) })
-      .then(async (r) => { if (!r.ok) throw new Error("Failed"); return r.json(); }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["customers"] }); toast.success("تمت إضافة العميل"); setOpen(false); setForm({ name: "", email: "", phone: "", address: "" }); },
-    onError: (e: Error) => toast.error(e.message),
-  });
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm" variant="outline"><Plus className="h-4 w-4" /> عميل جديد</Button></DialogTrigger>
-      <DialogContent>
-        <DialogHeader><DialogTitle>إضافة عميل</DialogTitle></DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5"><Label>الاسم</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>البريد الإلكتروني</Label><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>الهاتف</Label><Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
-          <div className="space-y-1.5"><Label>العنوان</Label><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></div>
-        </div>
-        <DialogFooter><Button disabled={isPending || !form.name} onClick={() => mutate()}>{isPending ? "جارٍ الحفظ..." : "حفظ العميل"}</Button></DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 function NewSalesOrderDialog() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
-  const { data: custData } = useCustomers();
-  const { data: itemsData } = useItemsList();
+  const { data: custData } = usePartiesList("customers");
+  const { data: itemsData } = useItemsForPickers();
   const [customerId, setCustomerId] = useState("");
   const [lines, setLines] = useState([{ itemId: "", quantity: 1, unitPrice: 0 }]);
   const qc = useQueryClient();
@@ -77,7 +46,7 @@ function NewSalesOrderDialog() {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ customerId, lines: lines.filter((l) => l.itemId) }),
     }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error ?? "Failed"); return r.json(); }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.success("تم إنشاء طلب البيع"); setOpen(false); setCustomerId(""); setLines([{ itemId: "", quantity: 1, unitPrice: 0 }]); },
+onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.success(t.orders.created); setOpen(false); setCustomerId(""); setLines([{ itemId: "", quantity: 1, unitPrice: 0 }]); },
     onError: (e: Error) => toast.error(e.message),
   });
 
@@ -86,37 +55,37 @@ function NewSalesOrderDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> طلب بيع جديد</Button></DialogTrigger>
+      <DialogTrigger asChild><Button size="sm"><Plus className="h-4 w-4" /> {t.orders.newSales}</Button></DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>إنشاء طلب بيع</DialogTitle>
-          <DialogDescription>حدّد العميل ثم أضف بنود الطلب مع الكمية وسعر البيع.</DialogDescription>
+          <DialogTitle>{t.orders.createSales}</DialogTitle>
+          <DialogDescription>{t.orders.description.replace("{party}", t.common.customer)}</DialogDescription>
         </DialogHeader>
 
         {/* Long orders scroll inside the dialog instead of stretching it past the viewport. */}
         <div className="-mx-1 max-h-[55vh] space-y-5 overflow-y-auto px-1">
           <div className="grid gap-1.5">
-            <Label htmlFor="sales-order-customer">العميل</Label>
+            <Label htmlFor="sales-order-customer">{t.common.customer}</Label>
             <NativeSelect
               id="sales-order-customer"
               className="w-full"
               value={customerId}
               onChange={(e) => setCustomerId(e.target.value)}
             >
-              <option value="">اختر العميل...</option>
+              <option value="">{t.orders.selectCustomer}</option>
               {custData?.customers.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </NativeSelect>
           </div>
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Label>بنود الطلب</Label>
+              <Label>{t.orders.lines}</Label>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setLines([...lines, { itemId: "", quantity: 1, unitPrice: 0 }])}
               >
-                <Plus className="h-3.5 w-3.5" /> إضافة بند
+                <Plus className="h-3.5 w-3.5" /> {t.orders.addLine}
               </Button>
             </div>
 
@@ -124,9 +93,9 @@ function NewSalesOrderDialog() {
                 a native <select> is sized by its widest <option>, so without both it
                 refuses to shrink and spills outside the dialog. */}
             <div className="hidden grid-cols-[minmax(0,1fr)_5rem_7rem_2.25rem] items-center gap-2 px-0.5 text-xs font-medium text-muted-foreground sm:grid">
-              <span>الصنف</span>
-              <span className="text-center">الكمية</span>
-              <span className="text-center">سعر البيع</span>
+              <span>{t.common.item}</span>
+              <span className="text-center">{t.common.quantity}</span>
+              <span className="text-center">{t.common.salePrice}</span>
               <span />
             </div>
 
@@ -137,38 +106,38 @@ function NewSalesOrderDialog() {
                   className="grid grid-cols-1 items-center gap-2 rounded-lg border border-dashed p-3 sm:grid-cols-[minmax(0,1fr)_5rem_7rem_2.25rem] sm:border-0 sm:p-0"
                 >
                   <div className="grid gap-1.5 sm:contents">
-                    <span className="text-xs font-medium text-muted-foreground sm:hidden">الصنف</span>
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">{t.common.item}</span>
                     <NativeSelect
                       className="w-full min-w-0"
-                      aria-label={`الصنف ${i + 1}`}
+                      aria-label={t.orders.lineItem(i + 1)}
                       value={line.itemId}
                       onChange={(e) => {
                         const item = itemsData?.items.find((it: any) => it.id === e.target.value);
                         setLines(lines.map((l, j) => j === i ? { ...l, itemId: e.target.value, unitPrice: item ? Number(item.salePrice) : 0 } : l));
                       }}
                     >
-                      <option value="">اختر الصنف...</option>
+                      <option value="">{t.common.selectItem}</option>
                       {itemsData?.items.map((it: any) => <option key={it.id} value={it.id}>{it.sku} — {it.name}</option>)}
                     </NativeSelect>
                   </div>
                   <div className="grid gap-1.5 sm:contents">
-                    <span className="text-xs font-medium text-muted-foreground sm:hidden">الكمية</span>
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">{t.common.quantity}</span>
                     <Input
                       type="number"
                       min={1}
-                      aria-label={`الكمية ${i + 1}`}
+                      aria-label={t.orders.lineQuantity(i + 1)}
                       className="w-full text-center"
                       value={line.quantity}
                       onChange={(e) => setLines(lines.map((l, j) => j === i ? { ...l, quantity: Number(e.target.value) } : l))}
                     />
                   </div>
                   <div className="grid gap-1.5 sm:contents">
-                    <span className="text-xs font-medium text-muted-foreground sm:hidden">سعر البيع</span>
+                    <span className="text-xs font-medium text-muted-foreground sm:hidden">{t.common.salePrice}</span>
                     <Input
                       type="number"
                       min={0}
                       step="0.01"
-                      aria-label={`سعر البيع ${i + 1}`}
+                      aria-label={t.orders.lineUnitPrice(i + 1)}
                       className="w-full text-center"
                       value={line.unitPrice}
                       onChange={(e) => setLines(lines.map((l, j) => j === i ? { ...l, unitPrice: Number(e.target.value) } : l))}
@@ -180,7 +149,7 @@ function NewSalesOrderDialog() {
                     size="icon"
                     className="justify-self-end text-muted-foreground hover:text-destructive sm:justify-self-center"
                     disabled={lines.length === 1}
-                    aria-label={`حذف البند ${i + 1}`}
+                    aria-label={t.orders.removeLine(i + 1)}
                     onClick={() => setLines(lines.filter((_, j) => j !== i))}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -192,11 +161,11 @@ function NewSalesOrderDialog() {
 
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2">
-              <span className="text-sm text-muted-foreground">البنود المكتملة</span>
-              <span className="text-sm font-medium tabular-nums">{filledLines.length} من {lines.length}</span>
+              <span className="text-sm text-muted-foreground">{t.orders.filledLines}</span>
+              <span className="text-sm font-medium tabular-nums">{t.orders.completedOf(filledLines.length, lines.length)}</span>
             </div>
             <div className="flex items-center justify-between rounded-lg border bg-muted/40 px-3 py-2">
-              <span className="text-sm text-muted-foreground">إجمالي الطلب</span>
+              <span className="text-sm text-muted-foreground">{t.orders.orderTotal}</span>
               <span className="text-sm font-semibold tabular-nums">{formatCurrency(orderTotal)}</span>
             </div>
           </div>
@@ -207,7 +176,7 @@ function NewSalesOrderDialog() {
             disabled={isPending || !customerId || filledLines.length === 0}
             onClick={() => mutate()}
           >
-            {isPending ? "جارٍ الحفظ..." : "إنشاء الطلب"}
+            {isPending ? t.common.saving : t.orders.create}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -215,16 +184,17 @@ function NewSalesOrderDialog() {
   );
 }
 function OrdersTab() {
+  const { t } = useI18n();
   const { data, isLoading } = useSalesOrders();
   const qc = useQueryClient();
   const { mutate: advance } = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) =>
       fetch(`/api/sales-orders/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.success("تم تحديث الحالة"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.success(t.common.statusUpdated); },
   });
   const { mutate: remove } = useMutation({
     mutationFn: (id: string) => fetch(`/api/sales-orders/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.success("تم حذف الطلب"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["sales-orders"] }); toast.success(t.orders.deleted); },
   });
 
   return (
@@ -233,13 +203,13 @@ function OrdersTab() {
       <div className="rounded-lg border">
         <Table>
           <TableHeader><TableRow>
-            <TableHead>رقم الطلب</TableHead><TableHead>العميل</TableHead><TableHead>التاريخ</TableHead>
-            <TableHead>الإجمالي</TableHead><TableHead>الحالة</TableHead><TableHead className="w-32" />
+            <TableHead>{t.common.orderNumber}</TableHead><TableHead>{t.common.customer}</TableHead><TableHead>{t.common.date}</TableHead>
+            <TableHead>{t.common.total}</TableHead><TableHead>{t.common.status}</TableHead><TableHead className="w-32" />
           </TableRow></TableHeader>
           <TableBody>
             {isLoading && Array.from({ length: 3 }).map((_, i) => <TableRow key={i}>{Array.from({ length: 6 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>)}
             {!isLoading && data?.salesOrders.length === 0 && (
-              <TableRow><TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-6 w-6" /> لا توجد طلبات بيع بعد.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground"><ShoppingCart className="mx-auto mb-2 h-6 w-6" /> {t.orders.salesEmpty}</TableCell></TableRow>
             )}
             {data?.salesOrders.map((so: any) => {
               const total = so.lines.reduce((s: number, l: any) => s + l.quantity * Number(l.unitPrice), 0);
@@ -250,9 +220,9 @@ function OrdersTab() {
                   <TableCell>{so.customer.name}</TableCell>
                   <TableCell>{formatDate(so.orderDate)}</TableCell>
                   <TableCell>{formatCurrency(total)}</TableCell>
-                  <TableCell><Badge variant={STATUS_VARIANT[so.status]}>{STATUS_LABELS[so.status]}</Badge></TableCell>
+                  <TableCell><Badge variant={STATUS_VARIANT[so.status]}>{t.status[so.status as keyof typeof t.status]}</Badge></TableCell>
                   <TableCell className="flex gap-1">
-                    {next && <Button size="sm" variant="outline" onClick={() => advance({ id: so.id, status: next })}>نقل إلى {STATUS_LABELS[next]}</Button>}
+                    {next && <Button size="sm" variant="outline" onClick={() => advance({ id: so.id, status: next })}>{t.production.moveTo(t.status[next as keyof typeof t.status])}</Button>}
                     <Button variant="ghost" size="icon" onClick={() => remove(so.id)}><Trash2 className="h-4 w-4 text-muted-foreground" /></Button>
                   </TableCell>
                 </TableRow>
@@ -265,40 +235,21 @@ function OrdersTab() {
   );
 }
 
-function CustomersTab() {
-  const { data, isLoading } = useCustomers();
-  return (
-    <div className="space-y-4">
-      <div className="flex justify-end"><NewCustomerDialog /></div>
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader><TableRow><TableHead>الاسم</TableHead><TableHead>البريد الإلكتروني</TableHead><TableHead>الهاتف</TableHead><TableHead>العنوان</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {isLoading && Array.from({ length: 3 }).map((_, i) => <TableRow key={i}>{Array.from({ length: 4 }).map((__, j) => <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>)}</TableRow>)}
-            {data?.customers.map((c: any) => (
-              <TableRow key={c.id}><TableCell className="font-medium">{c.name}</TableCell><TableCell>{c.email || "—"}</TableCell><TableCell>{c.phone || "—"}</TableCell><TableCell>{c.address || "—"}</TableCell></TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-    </div>
-  );
-}
-
 export default function SalesPage() {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">المبيعات</h1>
-        <p className="text-sm text-muted-foreground">إدارة العملاء وطلبات البيع.</p>
+        <h1 className="text-xl font-semibold tracking-tight">{t.nav.sales}</h1>
+        <p className="text-sm text-muted-foreground">{t.pages.salesDescription}</p>
       </div>
       <Tabs defaultValue="orders">
         <TabsList>
-          <TabsTrigger value="orders">الطلبات</TabsTrigger>
-          <TabsTrigger value="customers">العملاء</TabsTrigger>
+          <TabsTrigger value="orders">{t.nav.orders}</TabsTrigger>
+          <TabsTrigger value="customers">{t.common.customers}</TabsTrigger>
         </TabsList>
         <TabsContent value="orders"><OrdersTab /></TabsContent>
-        <TabsContent value="customers"><CustomersTab /></TabsContent>
+        <TabsContent value="customers"><PartyTable kind="customers" /></TabsContent>
       </Tabs>
     </div>
   );

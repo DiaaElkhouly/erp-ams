@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
+import { useI18n } from "@/lib/i18n";
 
 interface Warehouse {
   id: string;
@@ -31,6 +32,7 @@ function useWarehouses() {
 }
 
 function NewWarehouseDialog() {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ code: "", name: "", location: "" });
   const qc = useQueryClient();
@@ -40,7 +42,7 @@ function NewWarehouseDialog() {
     }).then((r) => { if (!r.ok) throw new Error("Failed to create warehouse"); return r.json(); }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["warehouses"] });
-      toast.success("تم إنشاء المستودع");
+      toast.success(t.warehouse.created);
       setOpen(false);
       setForm({ code: "", name: "", location: "" });
     },
@@ -50,27 +52,27 @@ function NewWarehouseDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm"><Plus className="h-4 w-4" /> مستودع جديد</Button>
+        <Button size="sm"><Plus className="h-4 w-4" /> {t.common.newWarehouse}</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogHeader><DialogTitle>إضافة مستودع</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{t.warehouse.addTitle}</DialogTitle></DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>الكود</Label>
+            <Label>{t.common.code}</Label>
             <Input value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder="WH-01" />
           </div>
           <div className="space-y-1.5">
-            <Label>الاسم</Label>
+            <Label>{t.common.name}</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Main Distribution Center" />
           </div>
           <div className="space-y-1.5">
-            <Label>الموقع</Label>
+            <Label>{t.common.location}</Label>
             <Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Cebu City, PH" />
           </div>
         </div>
         <DialogFooter>
           <Button disabled={isPending || !form.code || !form.name} onClick={() => mutate()}>
-            {isPending ? "جارٍ الحفظ..." : "حفظ المستودع"}
+            {isPending ? t.common.saving : t.warehouse.save}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -79,19 +81,20 @@ function NewWarehouseDialog() {
 }
 
 export default function WarehousePage() {
+  const { t } = useI18n();
   const { data, isLoading } = useWarehouses();
   const qc = useQueryClient();
   const { mutate: remove } = useMutation({
     mutationFn: (id: string) => fetch(`/api/warehouses/${id}`, { method: "DELETE" }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["warehouses"] }); toast.success("تم حذف المستودع"); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["warehouses"] }); toast.success(t.warehouse.deleted); },
   });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">المستودع</h1>
-          <p className="text-sm text-muted-foreground">مواقع التخزين والمخزون الحالي بها.</p>
+          <h1 className="text-xl font-semibold tracking-tight">{t.nav.warehouse}</h1>
+          <p className="text-sm text-muted-foreground">{t.pages.warehouseDescription}</p>
         </div>
         <NewWarehouseDialog />
       </div>
@@ -104,7 +107,7 @@ export default function WarehousePage() {
 
       {!isLoading && data?.warehouses.length === 0 && (
         <Card><CardContent className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
-          <WarehouseIcon className="h-6 w-6" /> لا توجد مستودعات بعد.
+          <WarehouseIcon className="h-6 w-6" /> {t.warehouse.empty}
         </CardContent></Card>
       )}
 
@@ -123,7 +126,7 @@ export default function WarehousePage() {
                 </Button>
               </CardHeader>
               <CardContent className="space-y-2">
-                <p className="text-xs text-muted-foreground">{wh.location ?? "لم يتم تحديد الموقع"}</p>
+                <p className="text-xs text-muted-foreground">{wh.location ?? t.warehouse.noLocation}</p>
                 <div className="flex items-center justify-between">
                   <Badge variant="secondary">{wh.stockLevels.length} SKUs</Badge>
                   <span className="text-sm font-medium">{totalUnits} units</span>

@@ -155,18 +155,30 @@ phase later.
 
 ## Phase 4 — Usability
 
-| ID | Task | Scope | Done when |
-|---|---|---|---|
-| **T4.1** | Pagination + sorting | inventory UI, `app/api/items` | `@tanstack/react-table` pagination/sorting wired up. The server already accepts `page`/`pageSize`; the UI ignores them. |
-| **T4.2** | Row-level edit dialogs | items, customers, suppliers, BOMs | PATCH exists but is status-only. Real edit dialogs per entity. |
-| **T4.3** | File upload | new route, Neon Object Storage | Presigned uploads for lab attachments, item photos, PO PDFs. `@neon/config` is already a dependency. |
-| **T4.4** | i18n: drop DOM mutation | `lib/i18n.tsx:482-518` + every page | `translateRenderedDocument` and its `MutationObserver` deleted; hardcoded Arabic routed through `t()`. |
+| ID | Task | Scope | Done when | Status |
+|---|---|---|---|---|
+| **T4.1** | Pagination + sorting | inventory UI, `app/api/items` | `@tanstack/react-table` pagination/sorting wired up. The server already accepts `page`/`pageSize`; the UI ignores them. | ✅ Done |
+| **T4.2** | Row-level edit dialogs | items, customers, suppliers, BOMs | PATCH exists but is status-only. Real edit dialogs per entity. | ✅ Done |
+| **T4.3** | File upload | new route, Neon Object Storage | Presigned uploads for lab attachments, item photos, PO PDFs. `@neon/config` is already a dependency. | ✅ Done |
+| **T4.4** | i18n: drop DOM mutation | `lib/i18n.tsx` + every page | `translateRenderedDocument` and its `MutationObserver` deleted; hardcoded Arabic routed through `t()`. | ✅ Done |
 
 > T4.4 is the largest mechanical diff in the plan — it touches every page.
 > Do it alone, with no other changes in the same pass. The current approach
 > (a `MutationObserver` rewriting DOM text nodes) breaks on dynamically
 > injected content, causes layout thrash, and makes translated strings
 > ungreppable.
+
+### Notes on T4.4
+
+The catalog lives in `lib/i18n-messages.ts`, which carries no `"use client"`
+directive. Client components read it through `useI18n()`; server components read
+it through `lib/i18n-server.ts`, which resolves the locale from the `ims-locale`
+cookie. Keeping one catalog in a client-marked module would turn `getMessages`
+into a client reference that server components are not allowed to invoke.
+
+Bilingual reference data (lab test definitions, standards, seed content) keeps
+its `...Ar`/`...En` field pairs rather than becoming catalog keys: those rows are
+data, not UI chrome, and the page already selects by locale.
 
 ---
 
@@ -198,12 +210,13 @@ T0.1 -> T0.2 -> T1.1 -> T1.2 -> T1.3 -> T1.4 -> T1.5 -> T1.6 -> T1.7
       -> T5.1 -> T5.2 -> T5.3
 ```
 
-Progress: **Phases 0–3 complete**, including the MRP → draft-PO add from the
-Phase 3 window. Next up is **T4.1** (pagination + sorting in the inventory UI);
-the server already accepts `page`/`pageSize` and the UI ignores them.
+Progress: **Phases 0–4 complete**, including the MRP → draft-PO add from the
+Phase 3 window. Next up is Phase 5: **T5.1** (CI workflow running
+`tsc --noEmit`, lint, and `prisma migrate deploy`).
 
-Do T4.4 alone. It is the largest mechanical diff in the plan and touches every
-page.
+T4.4 is finished: no `MutationObserver`, no DOM text rewriting, and every page
+reads its copy from the locale catalog. Verified with `tsc --noEmit`, 275 tests,
+and `npm run build`.
 
 Phases 0-1 are the real work; everything after is additive.
 

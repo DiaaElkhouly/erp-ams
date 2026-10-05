@@ -8,6 +8,7 @@ import { DateRangeParams, resolveDateRange } from "@/lib/date-range";
 import { getEarliestRecordDate } from "@/lib/dashboard-metrics";
 import { getReportSuite } from "@/lib/report-data";
 import { formatDateTime } from "@/lib/utils";
+import { getServerI18n } from "@/lib/i18n-server";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const { t } = await getServerI18n();
   const rawParams = await searchParams;
   const param = (key: string): string | undefined => {
     const value = rawParams[key];
@@ -31,7 +33,7 @@ export default async function ReportsPage({
 
   const earliest = await getEarliestRecordDate();
   const range = resolveDateRange(params, earliest);
-  const suite = await getReportSuite(range);
+  const suite = await getReportSuite(range, t);
 
   const printedAt = formatDateTime(suite.generatedAt);
   const isEmpty = suite.sections.every((section) => section.rows.length === 0);
@@ -41,9 +43,9 @@ export default async function ReportsPage({
       <OfflineBanner />
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">التقارير</h1>
+          <h1 className="text-xl font-semibold tracking-tight">{t.nav.reports}</h1>
           <p className="text-sm text-muted-foreground">
-            تقارير تفصيلية قابلة للتصدير إلى Excel و PDF عن الفترة{" "}
+            {t.reports.subtitle}{" "}
             <span className="tabular-nums">{suite.rangeLabel}</span>
           </p>
         </div>
@@ -59,8 +61,9 @@ export default async function ReportsPage({
           {suite.title}
         </h1>
         <p className="text-[10pt] text-muted-foreground">
-          الفترة: <span className="tabular-nums">{suite.rangeLabel}</span> · تاريخ الاستخراج:{" "}
-          <span className="tabular-nums">{printedAt}</span> · العملة: {suite.currency}
+          {t.reports.printMeta.period}: <span className="tabular-nums">{suite.rangeLabel}</span> ·{" "}
+          {t.reports.printMeta.generatedAt}: <span className="tabular-nums">{printedAt}</span> ·{" "}
+          {t.reports.currencyLabel} {suite.currency}
         </p>
       </div>
 
@@ -76,17 +79,15 @@ export default async function ReportsPage({
         className="flex flex-wrap items-center gap-1.5 print:hidden"
       >
         <Badge variant="outline">
-          {suite.sections.length} تقرير · <span className="tabular-nums">{printedAt}</span>
+          {suite.sections.length} {t.reports.reportUnit} · <span className="tabular-nums">{printedAt}</span>
         </Badge>
-        <Badge variant="outline">العملة: {suite.currency}</Badge>
+        <Badge variant="outline">{t.reports.currencyLabel} {suite.currency}</Badge>
       </div>
 
       <section className="space-y-3">
         <div data-print-role="summary-heading" className="print:hidden">
-          <h2 className="text-base font-semibold tracking-tight">المؤشرات الملخصة</h2>
-          <p className="text-xs text-muted-foreground">
-            الأرقام الأساسية للفترة المختارة مقارنة بالفترة السابقة لها
-          </p>
+          <h2 className="text-base font-semibold tracking-tight">{t.reports.summaryKpis}</h2>
+          <p className="text-xs text-muted-foreground">{t.reports.summaryKpisHint}</p>
         </div>
         <ReportMetricsStrip metrics={suite.metrics} />
       </section>

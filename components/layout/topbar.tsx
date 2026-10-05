@@ -75,7 +75,7 @@ export function Topbar({ name, role }: { name: string; role: Role }) {
           aria-label={t.language}
         >
           <Languages className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{locale === "en" ? "عربي" : "EN"}</span>
+          <span className="hidden sm:inline">{locale === "en" ? t.arabic : t.englishShort}</span>
         </Button>
 
         <ThemeToggle />

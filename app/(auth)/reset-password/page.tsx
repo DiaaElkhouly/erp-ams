@@ -9,8 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { resetPassword } from "@/lib/actions/auth";
+import { useI18n } from "@/lib/i18n";
 
 function ResetPasswordForm() {
+  const { t } = useI18n();
   const router = useRouter();
   const params = useSearchParams();
   const token = params.get("token") ?? "";
@@ -33,20 +35,20 @@ function ResetPasswordForm() {
   return (
     <Card className="w-full max-w-md border-border/60 bg-card/85 shadow-2xl shadow-slate-900/10 backdrop-blur-xl dark:shadow-black/40">
       <CardHeader>
-        <CardTitle className="text-xl">تعيين كلمة مرور جديدة</CardTitle>
-        <CardDescription>اختر كلمة مرور قوية من 8 أحرف على الأقل.</CardDescription>
+        <CardTitle className="text-xl">{t.auth.resetTitle}</CardTitle>
+        <CardDescription>{t.auth.resetSubtitle}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="password">كلمة المرور الجديدة</Label>
+            <Label htmlFor="password">{t.auth.newPassword}</Label>
             <Input id="password" type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           <Button type="submit" className="w-full" disabled={loading || !token}>
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            تحديث كلمة المرور
+            {t.auth.updatePassword}
           </Button>
-          {!token && <p className="text-xs text-destructive">رمز إعادة التعيين مفقود أو غير صالح.</p>}
+          {!token && <p className="text-xs text-destructive">{t.auth.missingToken}</p>}
         </form>
       </CardContent>
     </Card>

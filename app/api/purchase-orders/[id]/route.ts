@@ -6,14 +6,22 @@ import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 import { applyMovements, defaultWarehouseId, type StockMovementInput } from "@/lib/inventory/stock-service";
 import { withReorderAlerts } from "@/lib/notifications/notify";
 
-const statusSchema = z.object({ status: z.enum(["DRAFT", "ORDERED", "RECEIVED", "CANCELLED"]) });
+const updateSchema = z
+  .object({
+    status: z.enum(["DRAFT", "ORDERED", "RECEIVED", "CANCELLED"]).optional(),
+    /** Object key of the supplier's PDF quote or delivery note. Nullable to clear it. */
+    documentKey: z.string().min(1).nullable().optional(),
+  })
+  .refine((body) => body.status !== undefined || body.documentKey !== undefined, {
+    message: "Provide a status or a documentKey",
+  });
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { error } = await requireModuleAccess("purchasing");
   if (error) return error;
   try {
     const { id } = await params;
-    const body = statusSchema.parse(await req.json());
+    const body = updateSchema.parse(await req.json());
 
     const { withIdempotency } = await import("@/lib/idempotency");
     return withIdempotency(req, "UPDATE", "PURCHASE_ORDER", (data: any) => data?.id ?? id, async () => {
@@ -24,6 +32,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         });
         if (!current) throw notFound("Purchase order not found");
 
+        // Attaching a document is a metadata edit: it must not run the status
+        // flow, or uploading a PDF to a RECEIVED order would throw below.
+        if (body.status === undefined) {
+          return tx.purchaseOrder.update({
+            where: { id },
+            data: { documentKey: body.documentKey ?? null },
+            include: { lines: true },
+          });
+        }
+
         // Receiving twice would book the same delivery into stock twice.
         if (current.status === "RECEIVED") {
           throw conflict(`Purchase order ${current.orderNumber} is already received and cannot change status`);
@@ -32,7 +50,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         if (body.status !== "RECEIVED") {
           return tx.purchaseOrder.update({
             where: { id },
-            data: { status: body.status },
+            data: { status: body.status, documentKey: body.documentKey ?? undefined },
             include: { lines: true },
           });
         }
@@ -60,7 +78,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
         return tx.purchaseOrder.update({
           where: { id },
-          data: { status: "RECEIVED" },
+          data: { status: "RECEIVED", documentKey: body.documentKey ?? undefined },
           include: { lines: true },
         });
       });

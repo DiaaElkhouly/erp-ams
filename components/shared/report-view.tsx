@@ -1,3 +1,5 @@
+"use client";
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -5,6 +7,7 @@ import { KpiCard, type KpiIcon } from "@/components/shared/kpi-card";
 import { ReportSectionExportButtons } from "@/components/shared/report-export-buttons";
 import { formatDelta, formatNumber } from "@/lib/utils";
 import { formatReportCell, type ReportMetric, type ReportSection } from "@/lib/report-data";
+import { useI18n } from "@/lib/i18n";
 
 const METRIC_ICONS: Record<string, KpiIcon> = {
   revenue: "wallet",
@@ -51,6 +54,7 @@ export function ReportMetricsStrip({ metrics }: { metrics: ReportMetric[] }) {
 }
 
 export function ReportSectionCard({ section }: { section: ReportSection }) {
+  const { t, locale } = useI18n();
   return (
     <Card data-print-section={section.id} className="print:break-inside-avoid print:shadow-none">
       <CardHeader className="print:pb-2">
@@ -61,7 +65,7 @@ export function ReportSectionCard({ section }: { section: ReportSection }) {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant="outline" className="tabular-nums">
-              {formatNumber(section.rows.length, 0, "ar-EG")} سجل
+              {formatNumber(section.rows.length, 0, locale === "ar" ? "ar-EG" : "en-US")} {t.reports.recordsUnit}
             </Badge>
             <ReportSectionExportButtons
               sectionId={section.id}
@@ -74,7 +78,7 @@ export function ReportSectionCard({ section }: { section: ReportSection }) {
       <CardContent>
         {section.rows.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            لا توجد بيانات في الفترة المختارة.
+            {t.reports.emptyRange}
           </p>
         ) : (
           <div data-print-table className="overflow-x-auto rounded-lg border">
@@ -111,10 +115,11 @@ export function ReportSectionCard({ section }: { section: ReportSection }) {
 }
 
 export function ReportDeltaNote({ label, value }: { label: string; value: number | null }) {
+  const { t } = useI18n();
   const delta = formatDelta(value);
   return (
     <span className="text-xs text-muted-foreground">
-      {label}: {delta ?? "لا توجد فترة سابقة للمقارنة"}
+      {label}: {delta ?? t.kpi.noPrevious}
     </span>
   );
 }

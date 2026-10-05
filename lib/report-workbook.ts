@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { formatDateTime } from "@/lib/utils";
 import type { ReportCell, ReportColumnKind, ReportSuite } from "@/lib/report-data";
+import type { Messages } from "@/lib/i18n-messages";
 
 export const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -8,7 +9,7 @@ export const XLSX_MIME =
 /** Raised when `?section=` names a report the suite does not contain. */
 export class UnknownReportSectionError extends Error {
   constructor(sectionId: string) {
-    super(`لا يوجد تقرير بالمعرّف «${sectionId}»`);
+    super(`Unknown report section "${sectionId}"`);
     this.name = "UnknownReportSectionError";
   }
 }
@@ -57,8 +58,8 @@ function columnLetter(index: number) {
 }
 
 /** Excel rejects these characters in sheet names and caps them at 31 characters. */
-function safeSheetName(title: string, taken: Set<string>) {
-  const base = title.replace(/[[\]:*?/\\]/g, " ").trim().slice(0, 31) || "تقرير";
+function safeSheetName(title: string, taken: Set<string>, fallback: string) {
+  const base = title.replace(/[[\]:*?/\\]/g, " ").trim().slice(0, 31) || fallback;
   let name = base;
   let suffix = 2;
   while (taken.has(name)) {
@@ -95,7 +96,7 @@ function configureColumns(sheet: ExcelJS.Worksheet, section: ReportSuite["sectio
   });
 }
 
-function configurePageSetup(sheet: ExcelJS.Worksheet) {
+function configurePageSetup(sheet: ExcelJS.Worksheet, t: Messages) {
   sheet.pageSetup = {
     orientation: "landscape",
     paperSize: 9,
@@ -106,16 +107,16 @@ function configurePageSetup(sheet: ExcelJS.Worksheet) {
     margins: { left: 0.3, right: 0.3, top: 0.5, bottom: 0.5, header: 0.2, footer: 0.2 },
   };
   sheet.headerFooter = {
-    oddFooter: "&L&8IMS — تقرير شامل&R&8صفحة &P من &N",
+    oddFooter: `&L&8IMS — ${t.reports.title}&R&8${t.reports.excel.pageOf.replace("{page}", "&P").replace("{pageCount}", "&N")}`,
   };
 }
 
 /** Metadata + headline KPIs. Only added to full-suite exports, not single reports. */
-function addCoverSheet(workbook: ExcelJS.Workbook, suite: ReportSuite) {
-  const cover = workbook.addWorksheet("ملخص التقرير", {
+function addCoverSheet(workbook: ExcelJS.Workbook, suite: ReportSuite, t: Messages) {
+  const cover = workbook.addWorksheet(t.reports.excel.coverSheet, {
     pageSetup: { orientation: "portrait", paperSize: 9, fitToPage: true, fitToWidth: 1, fitToHeight: 0 },
   });
-  configurePageSetup(cover);
+  configurePageSetup(cover, t);
 
   cover.mergeCells("A1:C1");
   cover.getCell("A1").value = suite.title;
@@ -124,10 +125,10 @@ function addCoverSheet(workbook: ExcelJS.Workbook, suite: ReportSuite) {
   cover.getRow(1).height = 26;
 
   const meta: Array<[string, string]> = [
-    ["الفترة الزمنية", suite.rangeLabel],
-    ["تاريخ استخراج التقرير", formatDateTime(suite.generatedAt)],
-    ["العملة", suite.currency],
-    ["عدد الأقسام", String(suite.sections.length)],
+    [t.reports.excel.metaPeriod, suite.rangeLabel],
+    [t.reports.excel.metaGeneratedAt, formatDateTime(suite.generatedAt)],
+    [t.reports.excel.metaCurrency, suite.currency],
+    [t.reports.excel.metaSectionCount, String(suite.sections.length)],
   ];
   meta.forEach(([key, value], index) => {
     const row = cover.getRow(index + 2);
@@ -139,7 +140,7 @@ function addCoverSheet(workbook: ExcelJS.Workbook, suite: ReportSuite) {
 
   const headerOffset = meta.length + 3;
   const headerRow = cover.getRow(headerOffset);
-  ["المؤشر", "القيمة", "التغير عن الفترة السابقة"].forEach((text, index) => {
+  [t.reports.excel.metricColumn, t.reports.excel.valueColumn, t.reports.excel.deltaColumn].forEach((text, index) => {
     const cell = headerRow.getCell(index + 1);
     cell.value = text;
     cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -173,8 +174,9 @@ function addCoverSheet(workbook: ExcelJS.Workbook, suite: ReportSuite) {
 
 export async function buildReportWorkbook(
   suite: ReportSuite,
-  options: { sectionId?: string } = {},
+  options: { sectionId?: string; t: Messages },
 ): Promise<Uint8Array> {
+  const { t } = options;
   const sections = options.sectionId
     ? suite.sections.filter((section) => section.id === options.sectionId)
     : suite.sections;
@@ -188,11 +190,11 @@ export async function buildReportWorkbook(
   workbook.created = suite.generatedAt;
 
   const taken = new Set<string>();
-  if (!options.sectionId) addCoverSheet(workbook, suite);
+  if (!options.sectionId) addCoverSheet(workbook, suite, t);
 
   for (const section of sections) {
-    const sheet = workbook.addWorksheet(safeSheetName(section.title, taken));
-    configurePageSetup(sheet);
+    const sheet = workbook.addWorksheet(safeSheetName(section.title, taken, t.reports.excel.sheetFallback));
+    configurePageSetup(sheet, t);
     const lastColumn = section.columns.length;
 
     sheet.mergeCells(1, 1, 1, lastColumn);
@@ -249,7 +251,7 @@ export async function buildReportWorkbook(
     );
     if (additive.length > 0 && section.rows.length > 0) {
       const totalsRow = sheet.getRow(lastDataRow + 1);
-      totalsRow.getCell(1).value = "الإجمالي";
+      totalsRow.getCell(1).value = t.common.total;
       section.columns.forEach((column, columnIndex) => {
         const cell = totalsRow.getCell(columnIndex + 1);
         cell.font = { bold: true, color: { argb: BRAND } };

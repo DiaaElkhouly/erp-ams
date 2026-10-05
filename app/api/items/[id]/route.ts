@@ -4,14 +4,20 @@ import { db } from "@/lib/db";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 
 const updateSchema = z.object({
+  /** Unique, so a clash is a 409 rather than a validation error. */
+  sku: z.string().min(1).optional(),
   name: z.string().min(1).optional(),
-  description: z.string().optional(),
+  description: z.string().nullable().optional(),
+  type: z.enum(["RAW_MATERIAL", "COMPONENT", "FINISHED_GOOD", "CONSUMABLE"]).optional(),
+  unit: z.string().min(1).optional(),
   costPrice: z.coerce.number().nonnegative().optional(),
   salePrice: z.coerce.number().nonnegative().optional(),
   reorderPoint: z.coerce.number().int().nonnegative().optional(),
   reorderQty: z.coerce.number().int().nonnegative().optional(),
   /** Nullable so an item can be taken off every supplier's catalogue. */
   preferredSupplierId: z.string().min(1).nullable().optional(),
+  /** Storage object key, written by the presigned-upload flow (T4.3). */
+  photoKey: z.string().min(1).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 

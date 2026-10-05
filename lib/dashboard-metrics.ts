@@ -4,6 +4,7 @@ import {
   eachBucket, formatRangeLabel, previousPeriod,
 } from "@/lib/date-range";
 import { percentChange } from "@/lib/utils";
+import type { Messages } from "@/lib/i18n-messages";
 
 const ACTIVE_SALES_STATUSES = ["DRAFT", "CONFIRMED", "FULFILLED"] as const;
 const ACTIVE_PURCHASE_STATUSES = ["DRAFT", "ORDERED", "RECEIVED"] as const;
@@ -102,26 +103,21 @@ export type DashboardMetrics = {
   };
 };
 
-const SALES_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة", CONFIRMED: "مؤكد", FULFILLED: "منفذ", CANCELLED: "ملغى",
-};
-const PURCHASE_STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة", ORDERED: "تم الطلب", RECEIVED: "تم استلامه", CANCELLED: "ملغى",
-};
-const WORK_ORDER_STATUS_LABELS: Record<string, string> = {
-  PLANNED: "مخطط", RELEASED: "مُعتمد", IN_PROGRESS: "قيد التنفيذ",
-  COMPLETED: "مكتمل", CANCELLED: "ملغى",
-};
-const ITEM_TYPE_LABELS: Record<string, string> = {
-  RAW_MATERIAL: "مواد خام", COMPONENT: "مكونات", FINISHED_GOOD: "منتجات نهائية", CONSUMABLE: "مستهلكات",
-};
-
-export const DASHBOARD_STATUS_LABELS = {
-  sales: SALES_STATUS_LABELS,
-  purchase: PURCHASE_STATUS_LABELS,
-  workOrder: WORK_ORDER_STATUS_LABELS,
-  itemType: ITEM_TYPE_LABELS,
-};
+/**
+ * Every label here comes from the catalog rather than a local table, so the
+ * dashboard renders in the user's language instead of always in Arabic.
+ */
+function statusLabels(t: Messages) {
+  return {
+    sales: { DRAFT: t.status.DRAFT, CONFIRMED: t.status.CONFIRMED, FULFILLED: t.status.FULFILLED, CANCELLED: t.status.CANCELLED } as Record<string, string>,
+    purchase: { DRAFT: t.status.DRAFT, ORDERED: t.status.ORDERED, RECEIVED: t.status.RECEIVED, CANCELLED: t.status.CANCELLED } as Record<string, string>,
+    workOrder: {
+      PLANNED: t.status.PLANNED, RELEASED: t.status.RELEASED, IN_PROGRESS: t.status.IN_PROGRESS,
+      COMPLETED: t.status.COMPLETED, CANCELLED: t.status.CANCELLED,
+    } as Record<string, string>,
+    itemType: t.itemType as Record<string, string>,
+  };
+}
 
 type SalesLine = {
   quantity: number;
@@ -371,6 +367,7 @@ function buildTrend(
   purchases: PurchaseRecord[],
   productionQtyByKey: Map<string, number>,
   labByKey: Map<string, { total: number; passed: number }>,
+  labels: { week: string },
 ): TrendPoint[] {
   const buckets = createEmptyBuckets(range);
 
@@ -415,7 +412,7 @@ function buildTrend(
     return {
       ...bucket,
       key,
-      label: bucketLabel(date, range.granularity),
+      label: bucketLabel(date, range.granularity, labels),
       profit: round2(profit),
       revenue: round2(bucket.revenue),
       cogs: round2(bucket.cogs),
@@ -437,8 +434,9 @@ export async function getEarliestRecordDate() {
   return dates.length > 0 ? new Date(Math.min(...dates.map((d) => d.getTime()))) : undefined;
 }
 
-export async function getDashboardMetrics(range: DateRange): Promise<DashboardMetrics> {
+export async function getDashboardMetrics(range: DateRange, t: Messages): Promise<DashboardMetrics> {
   const prev = previousPeriod(range);
+  const labels = statusLabels(t);
 
   const [current, previous, statusGroups, purchaseStatusGroups, workOrderStatus, inventoryItems, production, lab] =
     await Promise.all([
@@ -474,7 +472,7 @@ export async function getDashboardMetrics(range: DateRange): Promise<DashboardMe
     labByKey.set(key, entry);
   }
 
-  const trend = buildTrend(range, current.sales, current.purchases, productionQtyByKey, labByKey);
+  const trend = buildTrend(range, current.sales, current.purchases, productionQtyByKey, labByKey, { week: t.weekPrefix });
 
   const deltas = Object.keys(current.metrics).reduce((acc, key) => {
     const metricKey = key as keyof WindowMetrics;
@@ -508,14 +506,14 @@ export async function getDashboardMetrics(range: DateRange): Promise<DashboardMe
 
   const salesByStatus = statusGroups.map((group) => ({
     status: group.status,
-    label: SALES_STATUS_LABELS[group.status] ?? group.status,
+    label: labels.sales[group.status] ?? group.status,
     count: group._count._all,
     value: round2(revenueByStatus.get(group.status) ?? 0),
   }));
 
   const purchaseByStatus = purchaseStatusGroups.map((group) => ({
     status: group.status,
-    label: PURCHASE_STATUS_LABELS[group.status] ?? group.status,
+    label: labels.purchase[group.status] ?? group.status,
     count: group._count._all,
     value: round2(purchaseByStatusValue.get(group.status) ?? 0),
   }));
@@ -561,7 +559,7 @@ export async function getDashboardMetrics(range: DateRange): Promise<DashboardMe
   };
 }
 
-export async function getOperationalSnapshot() {
+export async function getOperationalSnapshot(t: Messages) {
   const [workOrderStatus, items] = await Promise.all([
     db.workOrder.groupBy({ by: ["status"], _count: { _all: true } }),
     db.item.findMany({
@@ -570,9 +568,11 @@ export async function getOperationalSnapshot() {
     }),
   ]);
 
-  const byType = Object.keys(ITEM_TYPE_LABELS).map((type) => ({
+  const labels = statusLabels(t);
+
+  const byType = Object.keys(labels.itemType).map((type) => ({
     key: type,
-    type: ITEM_TYPE_LABELS[type],
+    type: labels.itemType[type],
     qty: sum(items.filter((item) => item.type === type).flatMap((item) => item.stockLevels.map((level) => level.quantity))),
     skus: items.filter((item) => item.type === type).length,
   }));
@@ -580,7 +580,7 @@ export async function getOperationalSnapshot() {
   return {
     workOrderStatus: workOrderStatus.map((group) => ({
       key: group.status,
-      status: WORK_ORDER_STATUS_LABELS[group.status] ?? group.status,
+      status: labels.workOrder[group.status] ?? group.status,
       count: group._count._all,
     })),
     byType,

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
+import { parsePaging, parseSort, type SortDirection } from "@/lib/api-query";
 
 const itemSchema = z.object({
   sku: z.string().min(1),
@@ -17,6 +19,45 @@ const itemSchema = z.object({
   preferredSupplierId: z.string().min(1).nullable().optional(),
 });
 
+/** Columns the list endpoint will order by. Anything else is ignored. */
+const SORTABLE = ["sku", "name", "type", "costPrice", "salePrice", "reorderPoint", "reorderQty", "onHand", "createdAt", "updatedAt"] as const;
+type SortableColumn = (typeof SORTABLE)[number];
+
+const itemInclude = { stockLevels: { include: { warehouse: true } }, preferredSupplier: true } as const;
+
+/**
+ * Orders ids by summed stock across every warehouse.
+ *
+ * Prisma cannot sort a parent by an aggregate over a child relation, and on-hand
+ * is the column a warehouse manager actually sorts by, so this resolves the
+ * order by hand and then re-reads only the page. The cost is one id list per
+ * request, which is why the page is sliced before the rows are fetched rather
+ * than after.
+ */
+async function orderIdsByOnHand(
+  where: Prisma.ItemWhereInput,
+  direction: SortDirection
+): Promise<{ ids: string[]; total: number }> {
+  const [items, grouped] = await Promise.all([
+    db.item.findMany({ where, select: { id: true } }),
+    // Scoped to the same filter, or this aggregates the whole stock table.
+    db.stockLevel.groupBy({ by: ["itemId"], where: { item: where }, _sum: { quantity: true } }),
+  ]);
+
+  const onHandByItem = new Map(grouped.map((row) => [row.itemId, row._sum.quantity ?? 0]));
+  const multiplier = direction === "asc" ? 1 : -1;
+  const ordered = items
+    .map((item) => item.id)
+    .sort((a, b) => {
+      const difference = (onHandByItem.get(a) ?? 0) - (onHandByItem.get(b) ?? 0);
+      // Ties fall back to id so paging through an on-hand sort is stable; without
+      // a total order Postgres is free to return the same row on two pages.
+      return difference !== 0 ? difference * multiplier : a.localeCompare(b);
+    });
+
+  return { ids: ordered, total: ordered.length };
+}
+
 export async function GET(req: NextRequest) {
   const { error } = await requireModuleAccess("inventory");
   if (error) return error;
@@ -24,24 +65,46 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const q = searchParams.get("q") ?? undefined;
   const type = searchParams.get("type") ?? undefined;
-  const page = parseInt(searchParams.get("page") ?? "1");
-  const pageSize = parseInt(searchParams.get("pageSize") ?? "20");
+  // Only filters when asked. Defaulting to active-only would silently hide rows
+  // from the BOM and order pickers, which ask for every item regardless of state.
+  const active = searchParams.get("isActive");
+  const { page, pageSize, skip, take } = parsePaging(searchParams);
+  const { sortBy, sortDir } = parseSort<SortableColumn>(searchParams, SORTABLE, {
+    defaultSortBy: "createdAt",
+    defaultSortDir: "desc",
+  });
 
-  const where = {
+  const where: Prisma.ItemWhereInput = {
     AND: [
-      q ? { OR: [{ name: { contains: q, mode: "insensitive" as const } }, { sku: { contains: q, mode: "insensitive" as const } }] } : {},
-      type ? { type: type as any } : {},
+      q ? { OR: [{ name: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }] } : {},
+      type ? { type: type as Prisma.ItemWhereInput["type"] } : {},
+      active === "true" || active === "false" ? { isActive: active === "true" } : {},
     ],
   };
 
   try {
+    if (sortBy === "onHand") {
+      const { ids, total } = await orderIdsByOnHand(where, sortDir);
+      const pageIds = ids.slice(skip, skip + take);
+      const items = await db.item.findMany({
+        where: { id: { in: pageIds } },
+        include: itemInclude,
+      });
+      const byId = new Map(items.map((item) => [item.id, item]));
+      // Restore the computed order: `in` gives no ordering guarantee.
+      return NextResponse.json({ items: pageIds.map((id) => byId.get(id)).filter(Boolean), total, page, pageSize });
+    }
+
+    const orderBy: Prisma.ItemOrderByWithRelationInput = { [sortBy ?? "createdAt"]: sortDir };
     const [items, total] = await Promise.all([
       db.item.findMany({
         where,
-        include: { stockLevels: { include: { warehouse: true } }, preferredSupplier: true },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
+        include: itemInclude,
+        // A stable secondary key, so paging cannot repeat or skip a row when the
+        // primary column ties.
+        orderBy: [{ ...orderBy }, { id: "asc" }],
+        skip,
+        take,
       }),
       db.item.count({ where }),
     ]);

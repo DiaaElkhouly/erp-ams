@@ -66,9 +66,15 @@ export function bucketKey(date: Date, granularity: Granularity) {
   return format(date, "yyyy-MM");
 }
 
-export function bucketLabel(date: Date, granularity: Granularity) {
+/**
+ * Bucket labels render on both sides of the app: the client-side date filter,
+ * and the server-side dashboard and report suites. That module cannot import the
+ * React catalog, so callers pass the one word they need instead of the function
+ * guessing a language from its own defaults.
+ */
+export function bucketLabel(date: Date, granularity: Granularity, labels: { week: string }) {
   if (granularity === "day") return format(date, "d MMM");
-  if (granularity === "week") return `أسبوع ${format(date, "d/M")}`;
+  if (granularity === "week") return `${labels.week} ${format(date, "d/M")}`;
   return format(date, "MMM yyyy");
 }
 

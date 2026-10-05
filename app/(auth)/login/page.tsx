@@ -82,7 +82,7 @@ export default function LoginPage() {
             aria-label={t.language}
           >
             <Languages className="h-3.5 w-3.5" />
-            {locale === "en" ? "عربي" : "EN"}
+            {locale === "en" ? t.arabic : t.englishShort}
           </Button>
           <ThemeToggle variant="outline" className="bg-card/80 backdrop-blur" />
         </div>

@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * The six states an invoice can be in. The three payment-derived ones
@@ -25,10 +26,6 @@ import { formatCurrency, formatDate } from "@/lib/utils";
 const STATUS_VARIANT: Record<string, "secondary" | "default" | "success" | "destructive"> = {
   DRAFT: "secondary", ISSUED: "default", PARTIALLY_PAID: "default",
   PAID: "success", OVERDUE: "destructive", CANCELLED: "destructive",
-};
-const STATUS_LABELS: Record<string, string> = {
-  DRAFT: "مسودة", ISSUED: "صادرة", PARTIALLY_PAID: "مدفوعة جزئياً",
-  PAID: "مدفوعة", OVERDUE: "متأخرة", CANCELLED: "ملغاة",
 };
 
 type LineDraft = { itemId: string; description: string; quantity: number; price: number };
@@ -67,6 +64,7 @@ function blankLine(): LineDraft {
  * the party field name, and whether the money column is a cost or a price.
  */
 function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [partyId, setPartyId] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -97,18 +95,18 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
             .filter((l) => l.itemId || l.description)
             .map((l) => ({
               itemId: l.itemId || undefined,
-              description: l.description || "بند",
+              description: l.description || t.finance.defaultLineDescription,
               quantity: Number(l.quantity),
               ...(isSupplier ? { unitCost: Number(l.price) } : { unitPrice: Number(l.price) }),
             })),
         }),
       }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "تعذّر إنشاء الفاتورة");
+        if (!r.ok) throw new Error((await r.json()).error ?? t.finance.createFailed);
         return r.json();
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [queryKey] });
-      toast.success(isSupplier ? "تم إنشاء فاتورة المورد" : "تم إنشاء فاتورة العميل");
+      toast.success(t.finance.created(t.common.supplier));
       setOpen(false);
       setPartyId("");
       setDueDate("");
@@ -144,32 +142,32 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm">
-          <Plus className="h-4 w-4" /> فاتورة {isSupplier ? "مورد" : "عميل"} جديدة
+          <Plus className="h-4 w-4" /> {t.finance.newInvoice(isSupplier ? t.common.supplier : t.common.customer)}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <DialogTitle>{isSupplier ? "فاتورة مورد جديدة" : "فاتورة عميل جديدة"}</DialogTitle>
+          <DialogTitle>{isSupplier ? t.finance.newSupplierInvoice : t.finance.newCustomerInvoice}</DialogTitle>
           <DialogDescription>
-            تُحفظ كمسودة أولاً حتى تتم مراجعة البنود، ثم تُصدر لتبدأ مدة الاستحقاق.
+            {t.finance.saveDraftHint}
           </DialogDescription>
         </DialogHeader>
 
         <div className="-mx-1 max-h-[55vh] space-y-5 overflow-y-auto px-1">
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-1">
-              <Label htmlFor="invoice-party">{isSupplier ? "المورد" : "العميل"}</Label>
+              <Label htmlFor="invoice-party">{isSupplier ? t.common.supplier : t.common.customer}</Label>
               <NativeSelect id="invoice-party" className="w-full" value={partyId} onChange={(e) => setPartyId(e.target.value)}>
-                <option value="">اختر...</option>
+                <option value="">{t.finance.selectAny}</option>
                 {parties?.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </NativeSelect>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="invoice-due">تاريخ الاستحقاق</Label>
+              <Label htmlFor="invoice-due">{t.production.dueDate}</Label>
               <Input id="invoice-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="invoice-tax">نسبة الضريبة %</Label>
+              <Label htmlFor="invoice-tax">{t.finance.taxRate}</Label>
               <Input
                 id="invoice-tax"
                 type="number"
@@ -184,9 +182,9 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <Label>البنود</Label>
+              <Label>{t.finance.lines}</Label>
               <Button variant="outline" size="sm" onClick={() => setLines([...lines, blankLine()])}>
-                <Plus className="h-3.5 w-3.5" /> إضافة بند
+                <Plus className="h-3.5 w-3.5" /> {t.finance.addLine}
               </Button>
             </div>
 
@@ -194,26 +192,26 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
               {lines.map((line, index) => (
                 <div key={index} className="grid gap-2 rounded-md border p-3 sm:grid-cols-12">
                   <div className="sm:col-span-5">
-                    <Label className="sr-only">الصنف</Label>
+                    <Label className="sr-only">{t.common.item}</Label>
                     <NativeSelect
                       className="w-full"
                       value={line.itemId}
                       onChange={(e) => applyItem(index, e.target.value)}
                     >
-                      <option value="">بند بدون صنف</option>
+                      <option value="">{t.finance.lineWithoutItem}</option>
                       {itemsData?.items?.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
                     </NativeSelect>
                   </div>
                   <div className="sm:col-span-3">
-                    <Label className="sr-only">الوصف</Label>
+                    <Label className="sr-only">{t.common.description}</Label>
                     <Input
-                      placeholder="الوصف"
+                      placeholder={t.common.description}
                       value={line.description}
                       onChange={(e) => setLines(lines.map((l, i) => (i === index ? { ...l, description: e.target.value } : l)))}
                     />
                   </div>
                   <div className="sm:col-span-2">
-                    <Label className="sr-only">الكمية</Label>
+                    <Label className="sr-only">{t.common.quantity}</Label>
                     <Input
                       type="number"
                       min={1}
@@ -226,7 +224,7 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
                       type="number"
                       min={0}
                       step="0.01"
-                      placeholder={isSupplier ? "التكلفة" : "السعر"}
+                      placeholder={isSupplier ? t.common.cost : t.common.salePrice}
                       value={line.price}
                       onChange={(e) => setLines(lines.map((l, i) => (i === index ? { ...l, price: Number(e.target.value) } : l)))}
                     />
@@ -246,15 +244,15 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
           </div>
 
           <div className="space-y-1 rounded-md bg-muted/50 p-3 text-sm">
-            <div className="flex justify-between"><span>الإجمالي قبل الضريبة</span><span>{formatCurrency(subtotal)}</span></div>
-            <div className="flex justify-between"><span>الضريبة</span><span>{formatCurrency(tax)}</span></div>
-            <div className="flex justify-between font-medium"><span>الإجمالي</span><span>{formatCurrency(subtotal + tax)}</span></div>
+            <div className="flex justify-between"><span>{t.finance.subtotal}</span><span>{formatCurrency(subtotal)}</span></div>
+            <div className="flex justify-between"><span>{t.finance.tax}</span><span>{formatCurrency(tax)}</span></div>
+            <div className="flex justify-between font-medium"><span>{t.common.total}</span><span>{formatCurrency(subtotal + tax)}</span></div>
           </div>
         </div>
 
         <DialogFooter>
           <Button disabled={isPending || !canSave} onClick={() => mutate()}>
-            {isPending ? "جارٍ الحفظ..." : "حفظ كمسودة"}
+            {isPending ? t.common.saving : t.finance.saveDraft}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -270,6 +268,7 @@ function NewInvoiceDialog({ direction }: { direction: "supplier" | "customer" })
  * someone type the figure they can already see is a chance to type it wrong.
  */
 function RecordPaymentDialog({ direction }: { direction: "supplier" | "customer" }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [invoiceId, setInvoiceId] = useState("");
   const [amount, setAmount] = useState("");
@@ -306,14 +305,14 @@ function RecordPaymentDialog({ direction }: { direction: "supplier" | "customer"
           reference: reference || undefined,
         }),
       }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "تعذّر تسجيل الدفعة");
+        if (!r.ok) throw new Error((await r.json()).error ?? t.finance.paymentFailed);
         return r.json();
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payments"] });
       qc.invalidateQueries({ queryKey: ["supplier-invoices"] });
       qc.invalidateQueries({ queryKey: ["customer-invoices"] });
-      toast.success("تم تسجيل الدفعة");
+      toast.success(t.finance.paymentRecorded);
       setOpen(false);
       setInvoiceId("");
       setAmount("");
@@ -326,55 +325,58 @@ function RecordPaymentDialog({ direction }: { direction: "supplier" | "customer"
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="outline">
-          <Wallet className="h-4 w-4" /> تسجيل دفعة
+          <Wallet className="h-4 w-4" /> {t.finance.recordPayment}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>تسجيل دفعة</DialogTitle>
-          <DialogDescription>الدفعة تُخصم من رصيد الفاتورة ويُشتق حالة السداد منها.</DialogDescription>
+          <DialogTitle>{t.finance.recordPayment}</DialogTitle>
+          <DialogDescription>{t.finance.recordPaymentHint}</DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="payment-invoice">الفاتورة</Label>
+            <Label htmlFor="payment-invoice">{t.finance.invoice}</Label>
             <NativeSelect id="payment-invoice" className="w-full" value={invoiceId} onChange={(e) => applyInvoice(e.target.value)}>
-              <option value="">اختر فاتورة...</option>
+              <option value="">{t.finance.selectInvoice}</option>
               {payable.map((i: any) => (
                 <option key={i.id} value={i.id}>
-                  {i.invoiceNumber} — متبقٍ {formatCurrency(Number(i.total) - Number(i.amountPaid))}
+                  {i.invoiceNumber} — {t.finance.outstandingOf(formatCurrency(Number(i.total) - Number(i.amountPaid)))}
                 </option>
               ))}
             </NativeSelect>
           </div>
           {selected && (
             <p className="text-xs text-muted-foreground">
-              الإجمالي {formatCurrency(selected.total)} — المدفوع {formatCurrency(selected.amountPaid)} — المتبقي{" "}
-              {formatCurrency(outstanding)}
+              {t.finance.balanceLine(
+                formatCurrency(selected.total),
+                formatCurrency(selected.amountPaid),
+                formatCurrency(outstanding),
+              )}
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="payment-amount">المبلغ</Label>
+              <Label htmlFor="payment-amount">{t.finance.amount}</Label>
               <Input id="payment-amount" type="number" min={0} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="payment-method">طريقة الدفع</Label>
+              <Label htmlFor="payment-method">{t.finance.method}</Label>
               <NativeSelect id="payment-method" className="w-full" value={method} onChange={(e) => setMethod(e.target.value)}>
-                <option value="BANK_TRANSFER">تحويل بنكي</option>
-                <option value="CASH">نقداً</option>
-                <option value="CARD">بطاقة</option>
-                <option value="CHEQUE">شيك</option>
+                <option value="BANK_TRANSFER">{t.finance.methodLabels.BANK_TRANSFER}</option>
+                <option value="CASH">{t.finance.methodLabels.CASH}</option>
+                <option value="CARD">{t.finance.methodLabels.CARD}</option>
+                <option value="CHEQUE">{t.finance.methodLabels.CHEQUE}</option>
               </NativeSelect>
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="payment-ref">المرجع</Label>
-            <Input id="payment-ref" placeholder="رقم الحوالة أو الشيك" value={reference} onChange={(e) => setReference(e.target.value)} />
+            <Label htmlFor="payment-ref">{t.finance.reference}</Label>
+            <Input id="payment-ref" placeholder={t.finance.referencePlaceholder} value={reference} onChange={(e) => setReference(e.target.value)} />
           </div>
         </div>
         <DialogFooter>
           <Button disabled={isPending || !invoiceId || !(Number(amount) > 0)} onClick={() => mutate()}>
-            {isPending ? "جارٍ الحفظ..." : "تسجيل الدفعة"}
+            {isPending ? t.common.saving : t.finance.recordPayment}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -384,6 +386,7 @@ function RecordPaymentDialog({ direction }: { direction: "supplier" | "customer"
 
 /** Issues a draft invoice, or cancels a live one. Both are one-way transitions. */
 function useInvoiceAction(isSupplier: boolean) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const endpoint = isSupplier ? "supplier-invoices" : "customer-invoices";
   return useMutation({
@@ -393,12 +396,12 @@ function useInvoiceAction(isSupplier: boolean) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       }).then(async (r) => {
-        if (!r.ok) throw new Error((await r.json()).error ?? "تعذّر تحديث الحالة");
+        if (!r.ok) throw new Error((await r.json()).error ?? t.finance.statusUpdateFailed);
         return r.json();
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [endpoint] });
-      toast.success("تم تحديث حالة الفاتورة");
+      toast.success(t.finance.statusUpdated);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -406,19 +409,26 @@ function useInvoiceAction(isSupplier: boolean) {
 
 /** Hard delete, only for invoices nothing has been paid against. */
 function useInvoiceDelete(isSupplier: boolean) {
+  const { t } = useI18n();
   const qc = useQueryClient();
   const endpoint = isSupplier ? "supplier-invoices" : "customer-invoices";
-  return useMutation({
-    mutationFn: (id: string) => fetch(`/api/${endpoint}/${id}`, { method: "DELETE" }),
+  const { mutate, isPending } = useMutation({
+    mutationFn: (id: string) =>
+      fetch(`/api/${endpoint}/${id}`, { method: "DELETE" }).then(async (r) => {
+        if (!r.ok) throw new Error((await r.json()).error ?? t.finance.deleteFailed);
+        return r.json();
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [endpoint] });
-      toast.success("تم حذف الفاتورة");
+      toast.success(t.finance.deleted);
     },
     onError: (e: Error) => toast.error(e.message),
   });
+  return { mutate, isPending };
 }
 
 function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
+  const { t } = useI18n();
   const isSupplier = direction === "supplier";
   const { data, isLoading } = useInvoices(direction);
   const act = useInvoiceAction(isSupplier);
@@ -442,10 +452,10 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-4 text-sm">
-          <span>المفوتر: <span className="font-medium">{formatCurrency(totals.billed)}</span></span>
-          <span>المستحق: <span className="font-medium">{formatCurrency(totals.outstanding)}</span></span>
+          <span>{t.finance.billed}: <span className="font-medium">{formatCurrency(totals.billed)}</span></span>
+          <span>{t.finance.outstanding}: <span className="font-medium">{formatCurrency(totals.outstanding)}</span></span>
           <span>
-            المتأخر:{" "}
+            {t.finance.overdue}:{" "}
             <span className={totals.overdue > 0 ? "font-medium text-destructive" : "font-medium"}>
               {formatCurrency(totals.overdue)}
             </span>
@@ -458,13 +468,13 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>الرقم</TableHead>
-              <TableHead>{isSupplier ? "المورد" : "العميل"}</TableHead>
-              <TableHead>الاستحقاق</TableHead>
-              <TableHead>الإجمالي</TableHead>
-              <TableHead>المدفوع</TableHead>
-              <TableHead>المتبقي</TableHead>
-              <TableHead>الحالة</TableHead>
+              <TableHead>{t.finance.number}</TableHead>
+              <TableHead>{isSupplier ? t.common.supplier : t.common.customer}</TableHead>
+              <TableHead>{t.finance.due}</TableHead>
+              <TableHead>{t.common.total}</TableHead>
+              <TableHead>{t.finance.amountPaid}</TableHead>
+              <TableHead>{t.finance.outstanding}</TableHead>
+              <TableHead>{t.common.status}</TableHead>
               <TableHead className="w-40" />
             </TableRow>
           </TableHeader>
@@ -475,7 +485,7 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
             {!isLoading && rows.length === 0 && (
               <TableRow>
                 <TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
-                  <FileText className="mx-auto mb-2 h-6 w-6" /> لا توجد فواتير بعد.
+                  <FileText className="mx-auto mb-2 h-6 w-6" /> {t.finance.empty}
                 </TableCell>
               </TableRow>
             )}
@@ -489,16 +499,16 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
                   <TableCell>{formatCurrency(invoice.total)}</TableCell>
                   <TableCell>{formatCurrency(invoice.amountPaid)}</TableCell>
                   <TableCell>{formatCurrency(outstanding)}</TableCell>
-                  <TableCell><Badge variant={STATUS_VARIANT[invoice.status]}>{STATUS_LABELS[invoice.status]}</Badge></TableCell>
+                  <TableCell><Badge variant={STATUS_VARIANT[invoice.status]}>{t.finance.status[invoice.status as keyof typeof t.finance.status] ?? invoice.status}</Badge></TableCell>
                   <TableCell className="flex gap-1">
                     {invoice.status === "DRAFT" && (
                       <Button size="sm" variant="outline" onClick={() => act.mutate({ id: invoice.id, status: "ISSUED" })}>
-                        إصدار
+                        {t.finance.issue}
                       </Button>
                     )}
                     {invoice.status !== "DRAFT" && invoice.status !== "CANCELLED" && invoice.status !== "PAID" && (
                       <Button size="sm" variant="outline" onClick={() => act.mutate({ id: invoice.id, status: "CANCELLED" })}>
-                        إلغاء
+                        {t.finance.cancel}
                       </Button>
                     )}
                     {/* Deleting cascades to the payment ledger, so the API refuses
@@ -508,6 +518,7 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
                         variant="ghost"
                         size="icon"
                         disabled={del.isPending}
+                        title={t.common.delete}
                         onClick={() => del.mutate(invoice.id)}
                       >
                         <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -525,6 +536,7 @@ function InvoicesTab({ direction }: { direction: "supplier" | "customer" }) {
 }
 
 function PaymentsTab() {
+  const { t } = useI18n();
   const { data, isLoading } = usePayments();
   const qc = useQueryClient();
   const payments = data?.payments ?? [];
@@ -537,9 +549,9 @@ function PaymentsTab() {
       qc.invalidateQueries({ queryKey: ["payments"] });
       qc.invalidateQueries({ queryKey: ["supplier-invoices"] });
       qc.invalidateQueries({ queryKey: ["customer-invoices"] });
-      toast.success("تم عكس الدفعة");
+      toast.success(t.finance.reversed);
     },
-    onError: () => toast.error("تعذّر عكس الدفعة"),
+    onError: () => toast.error(t.finance.reverseFailed),
   });
 
   return (
@@ -553,12 +565,12 @@ function PaymentsTab() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>التاريخ</TableHead>
-              <TableHead>الجهة</TableHead>
-              <TableHead>الفاتورة</TableHead>
-              <TableHead>المبلغ</TableHead>
-              <TableHead>الطريقة</TableHead>
-              <TableHead>المرجع</TableHead>
+              <TableHead>{t.common.date}</TableHead>
+              <TableHead>{t.finance.party}</TableHead>
+              <TableHead>{t.finance.invoice}</TableHead>
+              <TableHead>{t.finance.amount}</TableHead>
+              <TableHead>{t.finance.method}</TableHead>
+              <TableHead>{t.finance.reference}</TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
@@ -569,7 +581,7 @@ function PaymentsTab() {
             {!isLoading && payments.length === 0 && (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
-                  <ArrowLeftRight className="mx-auto mb-2 h-6 w-6" /> لم تُسجَّل أي دفعات بعد.
+                  <ArrowLeftRight className="mx-auto mb-2 h-6 w-6" /> {t.finance.noPayments}
                 </TableCell>
               </TableRow>
             )}
@@ -580,7 +592,7 @@ function PaymentsTab() {
                   <TableCell>{formatDate(payment.paidAt)}</TableCell>
                   <TableCell>
                     <Badge variant={payment.party === "SUPPLIER" ? "secondary" : "default"}>
-                      {payment.party === "SUPPLIER" ? "سداد لمورد" : "تحصيل من عميل"}
+                      {payment.party === "SUPPLIER" ? t.finance.partyBadge.supplier : t.finance.partyBadge.customer}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs">
@@ -588,13 +600,14 @@ function PaymentsTab() {
                     <span className="block text-muted-foreground">{invoice?.supplier?.name ?? invoice?.customer?.name}</span>
                   </TableCell>
                   <TableCell className="font-medium">{formatCurrency(payment.amount)}</TableCell>
-                  <TableCell>{payment.method}</TableCell>
+                  <TableCell>{t.finance.methodLabels[payment.method as keyof typeof t.finance.methodLabels] ?? payment.method}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{payment.reference ?? "—"}</TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"
                       size="icon"
                       disabled={reversing}
+                      title={t.common.delete}
                       onClick={() => reverse(payment.id)}
                     >
                       <Trash2 className="h-4 w-4 text-muted-foreground" />
@@ -611,18 +624,19 @@ function PaymentsTab() {
 }
 
 export default function FinancePage() {
+  const { t } = useI18n();
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold tracking-tight">المالية</h1>
-        <p className="text-sm text-muted-foreground">فواتير الموردين والعملاء ومتابعة التحصيل.</p>
+        <h1 className="text-xl font-semibold tracking-tight">{t.nav.finance}</h1>
+        <p className="text-sm text-muted-foreground">{t.finance.description}</p>
       </div>
 
       <Tabs defaultValue="supplier-invoices">
         <TabsList>
-          <TabsTrigger value="supplier-invoices">فواتير الموردين</TabsTrigger>
-          <TabsTrigger value="customer-invoices">فواتير العملاء</TabsTrigger>
-          <TabsTrigger value="payments">المدفوعات</TabsTrigger>
+          <TabsTrigger value="supplier-invoices">{t.finance.supplierInvoices}</TabsTrigger>
+          <TabsTrigger value="customer-invoices">{t.finance.customerInvoices}</TabsTrigger>
+          <TabsTrigger value="payments">{t.finance.payments}</TabsTrigger>
         </TabsList>
         <TabsContent value="supplier-invoices"><InvoicesTab direction="supplier" /></TabsContent>
         <TabsContent value="customer-invoices"><InvoicesTab direction="customer" /></TabsContent>

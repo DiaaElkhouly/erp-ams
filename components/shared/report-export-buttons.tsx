@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { FileSpreadsheet, FileText, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 
 function filenameFromDisposition(header: string | null) {
   if (!header) return null;
@@ -76,6 +77,7 @@ function todayStamp() {
 }
 
 export function ReportExportButtons({ disabled = false }: { disabled?: boolean }) {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const [exporting, setExporting] = useState(false);
 
@@ -91,38 +93,38 @@ export function ReportExportButtons({ disabled = false }: { disabled?: boolean }
       const response = await fetch(url);
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.error ?? "تعذّر إنشاء ملف Excel");
+        throw new Error(body.error ?? t.reports.export.generateFailed);
       }
       saveBlob(
         await response.blob(),
         filenameFromDisposition(response.headers.get("Content-Disposition")) ?? fallbackName,
       );
-      toast.success("تم تصدير التقرير إلى Excel", { id: toastId });
+      toast.success(t.reports.export.done, { id: toastId });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "تعذّر تصدير التقرير إلى Excel", { id: toastId });
+      toast.error(err instanceof Error ? err.message : t.reports.export.failed, { id: toastId });
     } finally {
       setExporting(false);
     }
-  }, []);
+  }, [t.reports.export]);
 
   return (
     <div className="flex flex-wrap items-center gap-2 print:hidden">
       <Button
-        onClick={() => downloadExcel(exportUrl, "IMS-Reports.xlsx", "جارٍ تجهيز ملف Excel…")}
+        onClick={() => downloadExcel(exportUrl, "IMS-Reports.xlsx", t.reports.export.preparingExcel)}
         disabled={disabled || exporting}
         size="sm"
       >
         {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileSpreadsheet className="h-4 w-4" />}
-        تصدير Excel
+        {t.reports.export.excel}
       </Button>
       <Button
-        onClick={() => printReport(null, `IMS - تقرير شامل - ${todayStamp()}`)}
+        onClick={() => printReport(null, t.reports.export.printTitle(t.reports.title, todayStamp()))}
         disabled={disabled}
         variant="outline"
         size="sm"
       >
         <FileText className="h-4 w-4" />
-        تصدير PDF
+        {t.reports.export.pdf}
       </Button>
     </div>
   );
@@ -138,6 +140,7 @@ export function ReportSectionExportButtons({
   sectionTitle: string;
   rowCount: number;
 }) {
+  const { t } = useI18n();
   const searchParams = useSearchParams();
   const [exporting, setExporting] = useState(false);
 
@@ -155,23 +158,20 @@ export function ReportSectionExportButtons({
         const response = await fetch(url);
         if (!response.ok) {
           const body = await response.json().catch(() => ({}));
-          throw new Error(body.error ?? "تعذّر إنشاء ملف Excel");
+          throw new Error(body.error ?? t.reports.export.generateFailed);
         }
         saveBlob(
           await response.blob(),
           filenameFromDisposition(response.headers.get("Content-Disposition")) ?? fallbackName,
         );
-        toast.success("تم تصدير هذا التقرير إلى Excel", { id: toastId });
+        toast.success(t.reports.export.sectionDone, { id: toastId });
       } catch (err) {
-        toast.error(
-          err instanceof Error ? err.message : "تعذّر تصدير هذا التقرير إلى Excel",
-          { id: toastId },
-        );
+        toast.error(err instanceof Error ? err.message : t.reports.export.sectionFailed, { id: toastId });
       } finally {
         setExporting(false);
       }
     },
-    [],
+    [t.reports.export],
   );
 
   const disabled = rowCount === 0;
@@ -183,8 +183,8 @@ export function ReportSectionExportButtons({
         variant="ghost"
         className="h-8 gap-1.5 px-2 text-xs"
         disabled={disabled || exporting}
-        title="تصدير هذا التقرير فقط إلى Excel"
-        onClick={() => downloadExcel(exportUrl, `${sectionId}.xlsx`, `جارٍ تجهيز «${sectionTitle}»…`)}
+        title={t.reports.export.sectionExcelTitle}
+        onClick={() => downloadExcel(exportUrl, `${sectionId}.xlsx`, t.reports.export.preparingSection(sectionTitle))}
       >
         {exporting ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -198,7 +198,7 @@ export function ReportSectionExportButtons({
         variant="ghost"
         className="h-8 gap-1.5 px-2 text-xs"
         disabled={disabled}
-        title="طباعة هذا التقرير فقط أو حفظه كـ PDF"
+        title={t.reports.export.sectionPdfTitle}
         onClick={() => printReport(sectionId, `IMS - ${sectionTitle}`)}
       >
         <FileText className="h-3.5 w-3.5" />

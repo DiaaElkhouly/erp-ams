@@ -16,6 +16,8 @@ const testSchema = z.object({
   maxValue: z.number().finite().optional().nullable(),
   status: z.enum(["PASS", "FAIL", "REVIEW"]),
   details: z.record(z.string(), z.unknown()).optional().nullable(),
+  /** Object key of the scanned certificate, written by the presigned upload flow. */
+  attachmentKey: z.string().min(1).nullable().optional(),
 });
 
 const mixSchema = z.object({

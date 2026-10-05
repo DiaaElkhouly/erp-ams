@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn, formatDelta } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 /**
  * Icons are resolved here rather than passed in: a server component cannot hand a
@@ -42,6 +43,7 @@ export type KpiCardProps = {
 export function KpiCard({
   label, value, icon, deltaPct, tone = "default", hint, footer,
 }: KpiCardProps) {
+  const { t } = useI18n();
   const Icon = icon ? ICONS[icon] : null;
   const hasDelta = deltaPct !== null && deltaPct !== undefined && Number.isFinite(deltaPct);
   const rising = hasDelta && (deltaPct as number) > 0;
@@ -74,10 +76,10 @@ export function KpiCard({
                 <DeltaIcon className="h-3 w-3" />
                 {formatDelta(deltaPct as number)}
               </span>
-              <span className="text-muted-foreground">{hint ?? "مقارنة بالفترة السابقة"}</span>
+              <span className="text-muted-foreground">{hint ?? t.kpi.vsPrevious}</span>
             </>
           ) : (
-            <span className="text-muted-foreground">{hint ?? "لا توجد فترة سابقة للمقارنة"}</span>
+            <span className="text-muted-foreground">{hint ?? t.kpi.noPrevious}</span>
           )}
         </div>
         {footer ? <p className="mt-1 text-[11px] text-muted-foreground">{footer}</p> : null}

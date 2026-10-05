@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { DEFAULT_CURRENCY, formatCompact, formatMoney, formatPercent } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
 const COLORS = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#65a30d"];
 const REVENUE_COLOR = "#2563eb";
@@ -40,14 +41,15 @@ function EmptyState({ message }: { message: string }) {
 }
 
 export function WorkOrderStatusChart({ data }: { data: { status: string; count: number }[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>أوامر الإنتاج حسب الحالة</CardTitle>
-        <CardDescription>مسار الإنتاج الحالي</CardDescription>
+        <CardTitle>{t.charts.workOrderTitle}</CardTitle>
+        <CardDescription>{t.charts.workOrderHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-64">
-        {data.length === 0 ? <EmptyState message="لا توجد أوامر إنتاج." /> : (
+        {data.length === 0 ? <EmptyState message={t.charts.noWorkOrders} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={data} dataKey="count" nameKey="status" innerRadius={50} outerRadius={80} paddingAngle={2}>
@@ -64,11 +66,12 @@ export function WorkOrderStatusChart({ data }: { data: { status: string; count: 
 }
 
 export function InventoryByTypeChart({ data }: { data: { type: string; qty: number }[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>المخزون المتاح حسب نوع الصنف</CardTitle>
-        <CardDescription>إجمالي الوحدات في جميع المستودعات</CardDescription>
+        <CardTitle>{t.charts.inventoryByTypeTitle}</CardTitle>
+        <CardDescription>{t.charts.inventoryByTypeHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-64">
         <ResponsiveContainer width="100%" height="100%">
@@ -77,7 +80,7 @@ export function InventoryByTypeChart({ data }: { data: { type: string; qty: numb
             <XAxis dataKey="type" tick={AXIS_FONT} />
             <YAxis tick={AXIS_FONT} />
             <Tooltip />
-            <Bar dataKey="qty" name="الوحدات" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
+            <Bar dataKey="qty" name={t.charts.units} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
@@ -101,14 +104,15 @@ export type FinancialTrendPoint = {
 
 /** Revenue vs cost of goods vs gross profit across the selected buckets. */
 export function ProfitabilityTrendChart({ data }: { data: FinancialTrendPoint[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>تحليل الربحية عبر الزمن</CardTitle>
-        <CardDescription>الإيرادات مقابل تكلفة البضاعة المباعة وصافي الربح</CardDescription>
+        <CardTitle>{t.charts.profitabilityTitle}</CardTitle>
+        <CardDescription>{t.charts.profitabilityHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-72">
-        {data.length === 0 ? <EmptyState message="لا توجد بيانات في الفترة المختارة." /> : (
+        {data.length === 0 ? <EmptyState message={t.charts.noDataInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
@@ -116,9 +120,9 @@ export function ProfitabilityTrendChart({ data }: { data: FinancialTrendPoint[] 
               <YAxis yAxisId="money" {...moneyAxis()} />
               <Tooltip {...moneyTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId="money" dataKey="revenue" name="الإيرادات" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={26} />
-              <Bar yAxisId="money" dataKey="cogs" name="تكلفة المبيعات" fill={COGS_COLOR} radius={[4, 4, 0, 0]} maxBarSize={26} />
-              <Line yAxisId="money" type="monotone" dataKey="profit" name="مجمل الربح" stroke={PROFIT_COLOR} strokeWidth={2} dot={false} />
+              <Bar yAxisId="money" dataKey="revenue" name={t.charts.revenue} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Bar yAxisId="money" dataKey="cogs" name={t.charts.cogs} fill={COGS_COLOR} radius={[4, 4, 0, 0]} maxBarSize={26} />
+              <Line yAxisId="money" type="monotone" dataKey="profit" name={t.charts.grossProfit} stroke={PROFIT_COLOR} strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -128,22 +132,23 @@ export function ProfitabilityTrendChart({ data }: { data: FinancialTrendPoint[] 
 }
 
 export function MarginTrendChart({ data, target }: { data: FinancialTrendPoint[]; target: number }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>هامش الربح %</CardTitle>
-        <CardDescription>نسبة مجمل الربح إلى الإيرادات لكل فترة</CardDescription>
+        <CardTitle>{t.charts.marginTitle}</CardTitle>
+        <CardDescription>{t.charts.marginHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-72">
-        {data.length === 0 ? <EmptyState message="لا توجد بيانات في الفترة المختارة." /> : (
+        {data.length === 0 ? <EmptyState message={t.charts.noDataInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
               <XAxis dataKey="label" tick={AXIS_FONT} interval="preserveStartEnd" />
               <YAxis tick={AXIS_FONT} tickFormatter={(value: number) => `${formatCompact(value)}%`} unit="%" />
               <Tooltip {...percentTooltip} />
-              <ReferenceLine y={target} stroke="#7c3aed" strokeDasharray="4 4" label={{ value: `المتوسط ${formatPercent(target)}`, fontSize: 10, position: "insideTopRight" }} />
-              <Area type="monotone" dataKey="marginPct" name="هامش الربح" stroke={PROFIT_COLOR} strokeWidth={2} fill={PROFIT_COLOR} fillOpacity={0.15} />
+              <ReferenceLine y={target} stroke="#7c3aed" strokeDasharray="4 4" label={{ value: t.charts.average(formatPercent(target)), fontSize: 10, position: "insideTopRight" }} />
+              <Area type="monotone" dataKey="marginPct" name={t.charts.margin} stroke={PROFIT_COLOR} strokeWidth={2} fill={PROFIT_COLOR} fillOpacity={0.15} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -154,14 +159,15 @@ export function MarginTrendChart({ data, target }: { data: FinancialTrendPoint[]
 
 /** Cash in (sales) vs cash out (purchases) and the resulting net position. */
 export function CashFlowChart({ data }: { data: FinancialTrendPoint[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>التدفق النقدي</CardTitle>
-        <CardDescription>المقبوضات مقابل المدفوعات وصافي التدفق</CardDescription>
+        <CardTitle>{t.charts.cashFlowTitle}</CardTitle>
+        <CardDescription>{t.charts.cashFlowHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-72">
-        {data.length === 0 ? <EmptyState message="لا توجد بيانات في الفترة المختارة." /> : (
+        {data.length === 0 ? <EmptyState message={t.charts.noDataInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
@@ -170,9 +176,9 @@ export function CashFlowChart({ data }: { data: FinancialTrendPoint[] }) {
               <ReferenceLine y={0} stroke="#94a3b8" />
               <Tooltip {...moneyTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar yAxisId={0} dataKey="revenue" name="مقبوضات" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Bar yAxisId={0} dataKey="purchases" name="مدفوعات" fill={OUTFLOW_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Line yAxisId={0} type="monotone" dataKey="cashFlow" name="صافي التدفق" stroke={CASH_COLOR} strokeWidth={2} dot={false} />
+              <Bar yAxisId={0} dataKey="revenue" name={t.charts.cashIn} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Bar yAxisId={0} dataKey="purchases" name={t.charts.cashOut} fill={OUTFLOW_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Line yAxisId={0} type="monotone" dataKey="cashFlow" name={t.charts.netCashFlow} stroke={CASH_COLOR} strokeWidth={2} dot={false} />
             </ComposedChart>
           </ResponsiveContainer>
         )}
@@ -182,11 +188,12 @@ export function CashFlowChart({ data }: { data: FinancialTrendPoint[] }) {
 }
 
 export function SalesVsPurchaseTrendChart({ data }: { data: FinancialTrendPoint[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>نظرة عامة على الطلبات</CardTitle>
-        <CardDescription>طلبات البيع مقابل طلبات الشراء</CardDescription>
+        <CardTitle>{t.charts.ordersOverviewTitle}</CardTitle>
+        <CardDescription>{t.charts.ordersOverviewHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-64">
         <ResponsiveContainer width="100%" height="100%">
@@ -196,8 +203,8 @@ export function SalesVsPurchaseTrendChart({ data }: { data: FinancialTrendPoint[
             <YAxis tick={AXIS_FONT} />
             <Tooltip />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Line type="monotone" dataKey="salesOrders" name="طلبات البيع" stroke={PROFIT_COLOR} strokeWidth={2} />
-            <Line type="monotone" dataKey="purchases" name="قيمة المشتريات" stroke={COGS_COLOR} strokeWidth={2} />
+            <Line type="monotone" dataKey="salesOrders" name={t.charts.salesOrders} stroke={PROFIT_COLOR} strokeWidth={2} />
+            <Line type="monotone" dataKey="purchases" name={t.charts.purchaseValue} stroke={COGS_COLOR} strokeWidth={2} />
           </LineChart>
         </ResponsiveContainer>
       </CardContent>
@@ -207,16 +214,17 @@ export function SalesVsPurchaseTrendChart({ data }: { data: FinancialTrendPoint[
 
 /** Horizontal share-of-revenue bars, the clearest way to read a percentage split. */
 export function SalesShareByProductChart({ data }: { data: { name: string; share: number; revenue: number; units: number }[] }) {
+  const { t } = useI18n();
   const rows = data.map((row) => ({ ...row, shareLabel: formatPercent(row.share) }));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>نسبة مساهمة الأصناف في المبيعات</CardTitle>
-        <CardDescription>حصة كل صنف من إجمالي الإيرادات</CardDescription>
+        <CardTitle>{t.charts.productShareTitle}</CardTitle>
+        <CardDescription>{t.charts.productShareHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-80">
-        {rows.length === 0 ? <EmptyState message="لا توجد مبيعات في الفترة المختارة." /> : (
+        {rows.length === 0 ? <EmptyState message={t.charts.noSalesInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows} layout="vertical" margin={{ left: 8, right: 32 }}>
               <CartesianGrid strokeDasharray="3 3" horizontal={false} className="stroke-muted" />
@@ -225,7 +233,7 @@ export function SalesShareByProductChart({ data }: { data: { name: string; share
               <Tooltip
                 formatter={(value: unknown, _name, item) => [
                   formatPercent(Number((item?.payload as { share: number }).share)),
-                  "الحصة من الإيرادات",
+                  t.charts.revenueShareTooltip,
                 ]}
                 labelFormatter={(label) => String(label)}
               />
@@ -241,14 +249,15 @@ export function SalesShareByProductChart({ data }: { data: { name: string; share
 }
 
 export function SalesShareByCustomerChart({ data }: { data: { name: string; share: number; revenue: number; profit: number }[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>توزيع المبيعات على العملاء</CardTitle>
-        <CardDescription>حصة كل عميل من إجمالي الإيرادات</CardDescription>
+        <CardTitle>{t.charts.customerShareTitle}</CardTitle>
+        <CardDescription>{t.charts.customerShareHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-80">
-        {data.length === 0 ? <EmptyState message="لا توجد مبيعات في الفترة المختارة." /> : (
+        {data.length === 0 ? <EmptyState message={t.charts.noSalesInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -274,28 +283,29 @@ export function SalesShareByCustomerChart({ data }: { data: { name: string; shar
 }
 
 export function ProfitMarginGauge({ marginPct, profit, revenue }: { marginPct: number; profit: number; revenue: number }) {
+  const { t } = useI18n();
   const clamped = Math.max(0, Math.min(100, marginPct));
-  const data = [{ name: "هامش الربح", value: clamped }];
+  const data = [{ name: t.charts.margin, value: clamped }];
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>نسبة الربح الإجمالية</CardTitle>
-        <CardDescription>مجمل الربح مقسومًا على الإيرادات</CardDescription>
+        <CardTitle>{t.charts.marginGaugeTitle}</CardTitle>
+        <CardDescription>{t.charts.marginGaugeHint}</CardDescription>
       </CardHeader>
       <CardContent className="relative h-64">
         <ResponsiveContainer width="100%" height="100%">
           <RadialBarChart innerRadius="60%" outerRadius="95%" startAngle={210} endAngle={-30} barSize={18} data={data}>
             <PolarAngleAxis type="number" domain={[0, 100]} tick={false} />
             <RadialBar dataKey="value" cornerRadius={8} background={{ fill: "rgba(148,163,184,0.25)" }} fill={PROFIT_COLOR} />
-            <Tooltip formatter={() => [formatPercent(marginPct), "هامش الربح"]} />
+            <Tooltip formatter={() => [formatPercent(marginPct), t.charts.margin]} />
           </RadialBarChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center pt-6">
           <span className="tabular-nums text-3xl font-semibold">{formatPercent(marginPct)}</span>
-          <span className="text-xs text-muted-foreground">من {formatMoney(revenue, DEFAULT_CURRENCY)}</span>
+          <span className="text-xs text-muted-foreground">{t.charts.of(formatMoney(revenue, DEFAULT_CURRENCY))}</span>
           <span className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-            ربح {formatMoney(profit, DEFAULT_CURRENCY)}
+            {t.charts.profitOf(formatMoney(profit, DEFAULT_CURRENCY))}
           </span>
         </div>
       </CardContent>
@@ -305,16 +315,17 @@ export function ProfitMarginGauge({ marginPct, profit, revenue }: { marginPct: n
 
 /** Cost structure of the period: purchase value split by supplier. */
 export function PurchaseShareChart({ data }: { data: { name: string; purchases: number; sharePct: number }[] }) {
+  const { t } = useI18n();
   const rows = data.map((row) => ({ ...row, label: `${row.name}` }));
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>توزيع المشتريات على الموردين</CardTitle>
-        <CardDescription>حصة كل مورد من إجمالي قيمة المشتريات</CardDescription>
+        <CardTitle>{t.charts.purchaseShareTitle}</CardTitle>
+        <CardDescription>{t.charts.purchaseShareHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-72">
-        {rows.length === 0 ? <EmptyState message="لا توجد مشتريات في الفترة المختارة." /> : (
+        {rows.length === 0 ? <EmptyState message={t.charts.noPurchasesInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rows}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
@@ -322,7 +333,7 @@ export function PurchaseShareChart({ data }: { data: { name: string; purchases: 
               <YAxis {...moneyAxis()} />
               <Tooltip {...moneyTooltip} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="purchases" name="قيمة المشتريات" fill={OUTFLOW_COLOR} radius={[4, 4, 0, 0]} maxBarSize={48} />
+              <Bar dataKey="purchases" name={t.charts.purchaseValue} fill={OUTFLOW_COLOR} radius={[4, 4, 0, 0]} maxBarSize={48} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -333,14 +344,15 @@ export function PurchaseShareChart({ data }: { data: { name: string; purchases: 
 
 /** Units produced vs units sold in the same bucket — the operational half of the story. */
 export function OutputVsSalesChart({ data }: { data: FinancialTrendPoint[] }) {
+  const { t } = useI18n();
   return (
     <Card>
       <CardHeader>
-        <CardTitle>الإنتاج مقابل المبيعات</CardTitle>
-        <CardDescription>الكميات المُنتجة والمُباعة في كل فترة</CardDescription>
+        <CardTitle>{t.charts.outputVsSalesTitle}</CardTitle>
+        <CardDescription>{t.charts.outputVsSalesHint}</CardDescription>
       </CardHeader>
       <CardContent className="h-72">
-        {data.length === 0 ? <EmptyState message="لا توجد بيانات في الفترة المختارة." /> : (
+        {data.length === 0 ? <EmptyState message={t.charts.noDataInRange} /> : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={data}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-muted" />
@@ -348,8 +360,8 @@ export function OutputVsSalesChart({ data }: { data: FinancialTrendPoint[] }) {
               <YAxis tick={AXIS_FONT} tickFormatter={(value: number) => formatCompact(value)} />
               <Tooltip />
               <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Bar dataKey="productionQty" name="إنتاج مكتمل" fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={24} />
-              <Bar dataKey="unitsSold" name="وحدات مباعة" fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Bar dataKey="productionQty" name={t.charts.completedOutput} fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={24} />
+              <Bar dataKey="unitsSold" name={t.charts.unitsSold} fill={REVENUE_COLOR} radius={[4, 4, 0, 0]} maxBarSize={24} />
             </BarChart>
           </ResponsiveContainer>
         )}

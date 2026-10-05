@@ -9,13 +9,6 @@
 
 export type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "LEAVE";
 
-export const ATTENDANCE_LABELS: Record<AttendanceStatus, string> = {
-  PRESENT: "حاضر",
-  ABSENT: "غائب",
-  LATE: "متأخر",
-  LEAVE: "إجازة",
-};
-
 export type AttendanceRecord = {
   employeeId: string;
   date: Date | string;

@@ -3,11 +3,16 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 
+/**
+ * Every field but the name is optional and nullable: the columns are nullable, and
+ * the register's form sends `null` for a cleared box so "no email" round-trips
+ * instead of arriving as an empty string. `""` stays accepted for older clients.
+ */
 const schema = z.object({
   name: z.string().min(1),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().optional(),
-  address: z.string().optional(),
+  email: z.string().email().nullish().or(z.literal("")),
+  phone: z.string().nullish(),
+  address: z.string().nullish(),
 });
 
 export async function GET() {

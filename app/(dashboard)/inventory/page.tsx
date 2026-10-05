@@ -13,9 +13,9 @@ export default function InventoryPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
         <h1 className="text-xl font-semibold tracking-tight">{t.nav.inventory}</h1>
-        <p className="text-sm text-muted-foreground">{t.localeName === "العربية" ? "إدارة الأصناف ومستويات المخزون وحدود إعادة الطلب." : "Manage items, stock levels, and reorder thresholds."}</p>
+        <p className="text-sm text-muted-foreground">{t.pages.inventoryDescription}</p>
         </div>
-        <Link href="/lab"><Button size="sm" variant="outline"><FlaskConical className="h-4 w-4" />{t.localeName === "العربية" ? "اختبارات الخامات" : "Material tests"}</Button></Link>
+        <Link href="/lab"><Button size="sm" variant="outline"><FlaskConical className="h-4 w-4" />{t.pages.materialTests}</Button></Link>
       </div>
       <ItemTable />
     </div>

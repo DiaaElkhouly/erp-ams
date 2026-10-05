@@ -4,6 +4,7 @@ import { DateRangeParams, resolveDateRange } from "@/lib/date-range";
 import { getEarliestRecordDate } from "@/lib/dashboard-metrics";
 import { getReportSuite } from "@/lib/report-data";
 import { UnknownReportSectionError, XLSX_MIME, buildReportWorkbook } from "@/lib/report-workbook";
+import { getMessages, LOCALE_COOKIE, resolveLocale } from "@/lib/i18n-messages";
 
 // exceljs is a Node-only dependency.
 export const runtime = "nodejs";
@@ -45,8 +46,9 @@ export async function GET(req: NextRequest) {
 
     const earliest = await getEarliestRecordDate();
     const range = resolveDateRange(readParams(searchParams), earliest);
-    const suite = await getReportSuite(range);
-    const workbook = await buildReportWorkbook(suite, { sectionId });
+const t = getMessages(resolveLocale(req.cookies.get(LOCALE_COOKIE)?.value));
+    const suite = await getReportSuite(range, t);
+    const workbook = await buildReportWorkbook(suite, { sectionId, t });
 
     const stamp = suite.generatedAt.toISOString().slice(0, 10);
     const section = sectionId ? suite.sections.find((entry) => entry.id === sectionId) : undefined;

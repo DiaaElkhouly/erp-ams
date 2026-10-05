@@ -45,14 +45,14 @@ describe("formatCurrency", () => {
 });
 
 describe("formatMoney", () => {
-  it("uses the Egyptian pound label by default", () => {
-    expect(formatMoney(1234.5)).toBe("1,235 ج.م");
+  it("uses the Egyptian pound code by default", () => {
+    expect(formatMoney(1234.5)).toBe("1,235 EGP");
     expect(DEFAULT_CURRENCY).toBe("EGP");
   });
 
   it("honours the fraction digit argument", () => {
-    expect(formatMoney(1234.5, "EGP", 2)).toBe("1,234.50 ج.م");
-    expect(formatMoney(-40, "EGP")).toBe("-40 ج.م");
+    expect(formatMoney(1234.5, "EGP", 2)).toBe("1,234.50 EGP");
+    expect(formatMoney(-40, "EGP")).toBe("-40 EGP");
   });
 
   it("falls back to the raw code for an unknown currency", () => {
@@ -60,7 +60,7 @@ describe("formatMoney", () => {
   });
 
   it("parses decimal strings", () => {
-    expect(formatMoney("1999.99")).toBe("2,000 ج.م");
+    expect(formatMoney("1999.99")).toBe("2,000 EGP");
   });
 
   it("maps every labelled currency", () => {
