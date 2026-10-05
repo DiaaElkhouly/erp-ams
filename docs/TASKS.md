@@ -95,10 +95,49 @@ server-side aggregation.
 
 | ID | Task | Scope | Done when |
 |---|---|---|---|
-| **T3.1** | Notifications | new model, `app/api/notifications`, `components/layout/topbar.tsx:81` | `Notification` model + read/unread. Bell stops showing a hardcoded `3` (it has no `onClick` today). Reorder-point breaches and low stock raise one. |
-| **T3.2** | Email delivery | `lib/actions/auth.ts:30` | Resend or Nodemailer sends the real link; `devResetUrl` returned only under `NODE_ENV=development`. |
-| **T3.3** | Finance module | net-new models + routes + page | `SupplierInvoice` / `CustomerInvoice` with payment status, plus a `Role.FINANCE` entry in `nav-items.ts` and `MODULE_PERMISSIONS`. |
-| **T3.4** | HR module | net-new models + routes + page | `Employee` + `Attendance`, `Role.HR` nav entry. |
+| ~~**T3.1**~~ ✅ | Notifications | new model, `app/api/notifications`, `components/layout/topbar.tsx:81` | `Notification` model + read/unread. Bell stops showing a hardcoded `3` (it has no `onClick` today). Reorder-point breaches and low stock raise one. |
+| ~~**T3.2**~~ ✅ | Email delivery | `lib/actions/auth.ts:30` | Resend or Nodemailer sends the real link; `devResetUrl` returned only under `NODE_ENV=development`. |
+| ~~**T3.3**~~ ✅ | Finance module | net-new models + routes + page | `SupplierInvoice` / `CustomerInvoice` with payment status, plus a `Role.FINANCE` entry in `nav-items.ts` and `MODULE_PERMISSIONS`. |
+| ~~**T3.4**~~ ✅ | HR module | net-new models + routes + page | `Employee` + `Attendance`, `Role.HR` nav entry. |
+| ~~**T3.5**~~ ✅ | MRP → draft POs | `lib/inventory/mrp-to-po.ts`, `app/api/mrp/[id]/purchase-orders` | The cheap add from this window. Suggestions grouped into one DRAFT PO per supplier, each `MrpLine` linked back so re-running cannot double-order. |
+
+### T3.1 — notifications
+
+`Notification` + `NotificationRead`. Read state is per user, not a column on the
+notification: a single `readAt` would let the first person to open the bell
+silence a stock-out alert for everyone else.
+
+Alerts fire on a **transition**, not on a level — `lib/notifications/reorder.ts`
+compares stock before and after each movement and only raises when an item
+crosses the threshold. This is wired into the three movement call sites
+(`work-orders/[id]`, `sales-orders/[id]`, `purchase-orders/[id]`).
+
+`module key: notifications` is granted to **all** nine roles, including
+`EMPLOYEE`. The bell is not a privilege.
+
+### T3.3 — finance
+
+Invoice status is **derived, not stored**: `OVERDUE` becomes true at midnight on
+a document nobody touched, so writing it would need a nightly job to undo it.
+`lib/finance/invoice.ts` computes it on read; `DRAFT` and `CANCELLED` are the
+only hand-settable states.
+
+`Payment` has two nullable invoice FKs because it serves both directions.
+Postgres cannot require exactly one to be set, so that rule lives in the route.
+
+An invoice with payments **cannot be deleted** — payments cascade, so deleting
+would take the ledger with it. Those get `CANCELLED` instead.
+
+### T3.5 — MRP → draft POs
+
+`Item.preferredSupplierId` is snapshotted onto `MrpLine.supplierId` when the run
+is computed, so editing the item master later cannot rewrite which supplier a
+past run proposed. `MrpLine.purchaseOrderId` is set on generation, which is what
+makes the button idempotent.
+
+Items with no preferred supplier are **skipped and reported**, never guessed —
+assigning a cement order to the steel supplier's account is worse than
+generating nothing.
 
 > The README claims HR / Finance / QC are "scaffolded." They are not —
 > `prisma/schema.prisma` contains no HR, Finance, or Machine models at all.
@@ -154,13 +193,17 @@ phase later.
 ```
 T0.1 -> T0.2 -> T1.1 -> T1.2 -> T1.3 -> T1.4 -> T1.5 -> T1.6 -> T1.7
       -> T2.1 -> T2.2 -> T2.3 -> T2.4 -> T2.5 -> T2.6
-      -> T3.1 -> T3.2 -> T3.3 -> T3.4
+      -> T3.1 -> T3.2 -> T3.3 -> T3.4 -> T3.5
       -> T4.1 -> T4.2 -> T4.3 -> T4.4
       -> T5.1 -> T5.2 -> T5.3
 ```
 
-Progress: Phase 0 complete. Next up is **T1.1** (`StockMovement` ledger), which
-unblocks T1.2's central stock mutation and T1.4's component consumption.
+Progress: **Phases 0–3 complete**, including the MRP → draft-PO add from the
+Phase 3 window. Next up is **T4.1** (pagination + sorting in the inventory UI);
+the server already accepts `page`/`pageSize` and the UI ignores them.
+
+Do T4.4 alone. It is the largest mechanical diff in the plan and touches every
+page.
 
 Phases 0-1 are the real work; everything after is additive.
 

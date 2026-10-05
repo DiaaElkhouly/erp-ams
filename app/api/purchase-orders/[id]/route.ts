@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { conflict, notFound } from "@/lib/api-error";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 import { applyMovements, defaultWarehouseId, type StockMovementInput } from "@/lib/inventory/stock-service";
+import { withReorderAlerts } from "@/lib/notifications/notify";
 
 const statusSchema = z.object({ status: z.enum(["DRAFT", "ORDERED", "RECEIVED", "CANCELLED"]) });
 
@@ -48,7 +49,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           note: `Received against purchase order ${current.orderNumber}`,
         }));
 
-        await applyMovements(tx, receipts);
+        // Receiving is the one movement that can clear a reorder breach, so the alerts
+        // it raises are recoveries rather than warnings.
+        await withReorderAlerts(
+          tx,
+          receipts.map((r) => r.itemId),
+          { refType: "PURCHASE_ORDER", refId: current.id },
+          () => applyMovements(tx, receipts),
+        );
 
         return tx.purchaseOrder.update({
           where: { id },

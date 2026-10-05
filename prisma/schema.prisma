@@ -1,7 +1,6 @@
 // IMS Prisma Schema
-// Covers: Auth/RBAC, Dashboard, Inventory, Warehouse, Production, BOM, MRP, Sales, Purchasing
-// Other modules from the brief (HR, Finance, QC) are represented as stub enums/relations
-// in the User model only, ready to extend with the same patterns used here.
+// Covers: Auth/RBAC, Notifications, Dashboard, Inventory, Warehouse, Production,
+// BOM, MRP, Lab, Sales, Purchasing, Finance, HR.
 
 generator client {
   provider = "prisma-client-js"
@@ -43,10 +42,14 @@ model User {
   updatedAt      DateTime  @updatedAt
 
   sessions       Session[]
-  workOrders     WorkOrder[]     @relation("WorkOrderCreatedBy")
-  salesOrders    SalesOrder[]    @relation("SalesOrderCreatedBy")
-  purchaseOrders PurchaseOrder[] @relation("PurchaseOrderCreatedBy")
+  workOrders     WorkOrder[]      @relation("WorkOrderCreatedBy")
+  salesOrders    SalesOrder[]     @relation("SalesOrderCreatedBy")
+  purchaseOrders PurchaseOrder[]  @relation("PurchaseOrderCreatedBy")
   auditLogs      AuditLog[]
+  notificationReads NotificationRead[]
+  supplierInvoices SupplierInvoice[] @relation("SupplierInvoiceCreatedBy")
+  customerInvoices CustomerInvoice[] @relation("CustomerInvoiceCreatedBy")
+  employeeProfile   Employee?
 
   @@map("users")
 }
@@ -75,6 +78,58 @@ model AuditLog {
 }
 
 // ---------------------------------------------------------------------------
+// NOTIFICATIONS
+// ---------------------------------------------------------------------------
+
+enum NotificationSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+/// One alert, addressed to whoever should see it rather than to one person.
+/// A shared alert with a per-user read flag needs two tables: the alert row is
+/// written once by whatever raised it, and each user who dismisses it gets their
+/// own row in NotificationRead. A single readAt on Notification would dismiss
+/// the alert for everybody, including the people who never opened it.
+model Notification {
+  id       String               @id @default(cuid())
+  /// Event family, e.g. "REORDER_BREACH" or "REORDER_RECOVERED".
+  type     String
+  severity NotificationSeverity @default(INFO)
+  title    String
+  body     String?
+  /// Where the bell deep-links, e.g. "/mrp".
+  href     String?
+  /// Stable identity of the event, so a repeat is one row rather than a queue
+  /// of identical pings. Null for alerts that should always raise on their own.
+  dedupeKey String?
+  createdAt DateTime            @default(now())
+
+  reads NotificationRead[]
+
+  /// Postgres treats NULLs as distinct, so unkeyed alerts are never collapsed
+  /// while every keyed alert can only be raised once.
+  @@unique([dedupeKey])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+model NotificationRead {
+  id             String   @id @default(cuid())
+  notificationId String
+  userId         String
+  readAt         DateTime @default(now())
+
+  notification Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([notificationId, userId])
+  @@index([userId])
+  @@map("notification_reads")
+}
+
+// ---------------------------------------------------------------------------
 // INVENTORY / WAREHOUSE
 // ---------------------------------------------------------------------------
 
@@ -97,6 +152,9 @@ model Item {
   reorderPoint  Int      @default(0)
   reorderQty    Int      @default(0)
   isActive      Boolean  @default(true)
+  /// Where replenishment for this item is normally bought. MRP groups its
+  /// suggestions by this so one run produces one draft PO per supplier.
+  preferredSupplierId String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -108,6 +166,9 @@ model Item {
   salesOrderLines SalesOrderLine[]
   poLines         PurchaseOrderLine[]
   mrpLines        MrpLine[]
+  preferredSupplier Supplier?     @relation("ItemPreferredSupplier", fields: [preferredSupplierId], references: [id], onDelete: SetNull)
+  supplierInvoiceLines SupplierInvoiceLine[]
+  customerInvoiceLines CustomerInvoiceLine[]
 
   @@index([type])
   @@map("items")
@@ -255,6 +316,7 @@ model MrpRun {
   runAt     DateTime   @default(now())
   notes     String?
   lines     MrpLine[]
+  purchaseOrders PurchaseOrder[]
 
   @@map("mrp_runs")
 }
@@ -266,9 +328,17 @@ model MrpLine {
   onHandQty     Int
   demandQty     Int
   suggestedQty  Int
+  /// Denormalised from Item.preferredSupplierId at run time, so a later change
+  /// to the item master cannot rewrite which supplier a past run proposed.
+  supplierId    String?
+  /// Set once this suggestion has been turned into a purchase order, which is
+  /// what stops the same run being generated into duplicate POs.
+  purchaseOrderId String?
 
-  mrpRun MrpRun @relation(fields: [mrpRunId], references: [id], onDelete: Cascade)
-  item   Item   @relation(fields: [itemId], references: [id])
+  mrpRun        MrpRun @relation(fields: [mrpRunId], references: [id], onDelete: Cascade)
+  item          Item   @relation(fields: [itemId], references: [id])
+  supplier      Supplier? @relation("MrpLineSupplier", fields: [supplierId], references: [id], onDelete: SetNull)
+  purchaseOrder PurchaseOrder? @relation("MrpLinePurchaseOrder", fields: [purchaseOrderId], references: [id], onDelete: SetNull)
 
   @@map("mrp_lines")
 }
@@ -327,7 +397,8 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  salesOrders SalesOrder[]
+  salesOrders    SalesOrder[]
+  customerInvoices CustomerInvoice[]
 
   @@map("customers")
 }
@@ -352,6 +423,7 @@ model SalesOrder {
   customer  Customer          @relation(fields: [customerId], references: [id])
   createdBy User              @relation("SalesOrderCreatedBy", fields: [createdById], references: [id])
   lines     SalesOrderLine[]
+  customerInvoices CustomerInvoice[]
 
   @@map("sales_orders")
 }
@@ -386,6 +458,9 @@ model Supplier {
   updatedAt DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  preferredByItems Item[]        @relation("ItemPreferredSupplier")
+  mrpLines      MrpLine[]       @relation("MrpLineSupplier")
+  supplierInvoices SupplierInvoice[]
 
   @@map("suppliers")
 }
@@ -410,6 +485,10 @@ model PurchaseOrder {
   supplier  Supplier            @relation(fields: [supplierId], references: [id])
   createdBy User                @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
   lines     PurchaseOrderLine[]
+  mrpRunId  String?
+  mrpRun      MrpRun?          @relation(fields: [mrpRunId], references: [id], onDelete: SetNull)
+  mrpLines    MrpLine[]        @relation("MrpLinePurchaseOrder")
+  supplierInvoices SupplierInvoice[]
 
   @@map("purchase_orders")
 }
@@ -425,4 +504,204 @@ model PurchaseOrderLine {
   item          Item          @relation(fields: [itemId], references: [id])
 
   @@map("purchase_order_lines")
+}
+
+// ---------------------------------------------------------------------------
+// FINANCE
+// ---------------------------------------------------------------------------
+
+/// Payment status shared by both invoice directions. ISSUE and payment tracking
+/// are separate concerns: an issued invoice with no money against it is OVERDUE
+/// once its due date passes, and a cancelled invoice never becomes PAID.
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+/// Which side of the ledger an invoice sits on. Money owed to us is an inflow;
+/// money we owe is an outflow, and the two are never the same document.
+enum PaymentParty {
+  SUPPLIER
+  CUSTOMER
+}
+
+model SupplierInvoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique
+  supplierId      String
+  status          InvoiceStatus @default(DRAFT)
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime?
+  subtotal        Decimal       @db.Decimal(14, 2)
+  taxAmount       Decimal       @default(0) @db.Decimal(14, 2)
+  total           Decimal       @db.Decimal(14, 2)
+  /// Running total of Payment.amount. Stored rather than summed on read so the
+  /// outstanding balance is answerable by an index instead of a join.
+  amountPaid      Decimal       @default(0) @db.Decimal(14, 2)
+  notes           String?
+  /// Source document, when the invoice bills a purchase order.
+  purchaseOrderId String?
+  createdById     String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  supplier      Supplier             @relation(fields: [supplierId], references: [id])
+  purchaseOrder PurchaseOrder?       @relation(fields: [purchaseOrderId], references: [id], onDelete: SetNull)
+  createdBy     User                 @relation("SupplierInvoiceCreatedBy", fields: [createdById], references: [id])
+  lines         SupplierInvoiceLine[]
+  payments      Payment[]
+
+  @@index([status])
+  @@index([dueDate])
+  @@map("supplier_invoices")
+}
+
+model SupplierInvoiceLine {
+  id                String   @id @default(cuid())
+  supplierInvoiceId String
+  /// Null for a fee that is not stock, e.g. freight or a tooling charge.
+  itemId            String?
+  description       String
+  quantity          Int
+  unitCost          Decimal  @db.Decimal(14, 2)
+  lineTotal         Decimal  @db.Decimal(14, 2)
+
+  supplierInvoice SupplierInvoice @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  item            Item?           @relation(fields: [itemId], references: [id])
+
+  @@map("supplier_invoice_lines")
+}
+
+model CustomerInvoice {
+  id              String        @id @default(cuid())
+  invoiceNumber   String        @unique
+  customerId      String
+  status          InvoiceStatus @default(DRAFT)
+  invoiceDate     DateTime      @default(now())
+  dueDate         DateTime?
+  subtotal        Decimal       @db.Decimal(14, 2)
+  taxAmount       Decimal       @default(0) @db.Decimal(14, 2)
+  total           Decimal       @db.Decimal(14, 2)
+  amountPaid      Decimal       @default(0) @db.Decimal(14, 2)
+  notes           String?
+  /// Source document, when the invoice bills a sales order.
+  salesOrderId    String?
+  createdById     String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  customer    Customer             @relation(fields: [customerId], references: [id])
+  salesOrder  SalesOrder?          @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+  createdBy   User                 @relation("CustomerInvoiceCreatedBy", fields: [createdById], references: [id])
+  lines       CustomerInvoiceLine[]
+  payments    Payment[]
+
+  @@index([status])
+  @@index([dueDate])
+  @@map("customer_invoices")
+}
+
+model CustomerInvoiceLine {
+  id               String   @id @default(cuid())
+  customerInvoiceId String
+  itemId           String?
+  description      String
+  quantity         Int
+  unitPrice        Decimal  @db.Decimal(14, 2)
+  lineTotal        Decimal  @db.Decimal(14, 2)
+
+  customerInvoice CustomerInvoice @relation(fields: [customerInvoiceId], references: [id], onDelete: Cascade)
+  item            Item?           @relation(fields: [itemId], references: [id])
+
+  @@map("customer_invoice_lines")
+}
+
+/// A payment against one invoice. Exactly one of the two invoice foreign keys is
+/// set: the database cannot express that with two nullable columns, so the
+/// route rejects any body that names both or neither.
+model Payment {
+  id                String       @id @default(cuid())
+  party             PaymentParty
+  supplierInvoiceId String?
+  customerInvoiceId String?
+  amount            Decimal      @db.Decimal(14, 2)
+  method            String       @default("BANK_TRANSFER")
+  reference         String?
+  paidAt            DateTime     @default(now())
+  createdAt         DateTime     @default(now())
+
+  supplierInvoice SupplierInvoice? @relation(fields: [supplierInvoiceId], references: [id], onDelete: Cascade)
+  customerInvoice CustomerInvoice? @relation(fields: [customerInvoiceId], references: [id], onDelete: Cascade)
+
+  @@index([party, paidAt])
+  @@map("payments")
+}
+
+// ---------------------------------------------------------------------------
+// HR
+// ---------------------------------------------------------------------------
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  TERMINATED
+}
+
+model Employee {
+  id           String         @id @default(cuid())
+  employeeCode String         @unique
+  firstName    String
+  lastName     String
+  email        String?        @unique
+  phone        String?
+  department   String
+  position     String
+  hireDate     DateTime       @default(now())
+  /// Monthly gross salary. Nullable: not every employee record is payroll-grade.
+  salary       Decimal?       @db.Decimal(14, 2)
+  status       EmployeeStatus @default(ACTIVE)
+  /// Links the person to a login. One employee to one account, so the reverse
+  /// side on User is a single optional profile rather than a list.
+  userId       String?        @unique
+  notes        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attendance Attendance[]
+
+  @@index([department])
+  @@index([status])
+  @@map("employees")
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  LEAVE
+}
+
+/// One row per employee per day, enforced by the unique index: a duplicated
+/// check-in is a second row the shift report would double-count, so it is a
+/// conflict rather than an overwrite.
+model Attendance {
+  id         String           @id @default(cuid())
+  employeeId String
+  date       DateTime         @db.Date
+  checkIn    DateTime?
+  checkOut   DateTime?
+  status     AttendanceStatus @default(PRESENT)
+  notes      String?
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@index([status])
+  @@map("attendance")
 }

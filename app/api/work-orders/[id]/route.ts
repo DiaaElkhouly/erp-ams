@@ -5,6 +5,7 @@ import { conflict, notFound } from "@/lib/api-error";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 import { applyMovements } from "@/lib/inventory/stock-service";
 import { planWorkOrderCompletion } from "@/lib/inventory/work-order-completion";
+import { withReorderAlerts } from "@/lib/notifications/notify";
 
 const statusSchema = z.object({
   status: z.enum(["PLANNED", "RELEASED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]),
@@ -63,7 +64,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
         // One transaction: if any component is short, applyMovement throws and the
         // order stays IN_PROGRESS with the ledger untouched.
-        await applyMovements(tx, movements);
+        //
+        // Wrapped in withReorderAlerts because completing a batch is the single
+        // biggest consumer in the plant: it is exactly when a component drops
+        // through its reorder point, and without this nothing tells anyone.
+        await withReorderAlerts(
+          tx,
+          movements.map((m) => m.itemId),
+          { refType: "WORK_ORDER", refId: current.id },
+          () => applyMovements(tx, movements),
+        );
 
         return tx.workOrder.update({
           where: { id },

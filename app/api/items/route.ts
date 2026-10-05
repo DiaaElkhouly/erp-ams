@@ -13,6 +13,8 @@ const itemSchema = z.object({
   salePrice: z.coerce.number().nonnegative(),
   reorderPoint: z.coerce.number().int().nonnegative().default(0),
   reorderQty: z.coerce.number().int().nonnegative().default(0),
+  /** Where an MRP suggestion for this item should be ordered from. */
+  preferredSupplierId: z.string().min(1).nullable().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -36,7 +38,7 @@ export async function GET(req: NextRequest) {
     const [items, total] = await Promise.all([
       db.item.findMany({
         where,
-        include: { stockLevels: { include: { warehouse: true } } },
+        include: { stockLevels: { include: { warehouse: true } }, preferredSupplier: true },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,

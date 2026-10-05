@@ -10,5 +10,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "mrp", href: "/mrp", icon: "CalendarClock", module: "mrp" },
   { label: "sales", href: "/sales", icon: "ShoppingCart", module: "sales" },
   { label: "purchasing", href: "/purchasing", icon: "Truck", module: "purchasing" },
+  { label: "finance", href: "/finance", icon: "Receipt", module: "finance" },
+  { label: "hr", href: "/hr", icon: "Users", module: "hr" },
   { label: "reports", href: "/reports", icon: "BarChart3", module: "reports" },
 ];

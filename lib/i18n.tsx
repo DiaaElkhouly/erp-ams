@@ -56,6 +56,8 @@ const messages = {
       mrp: "MRP",
       sales: "Sales",
       purchasing: "Purchasing",
+      finance: "Finance",
+      hr: "HR",
       reports: "Reports",
     },
     common: {
@@ -171,6 +173,8 @@ const messages = {
       mrp: "تخطيط الاحتياجات",
       sales: "المبيعات",
       purchasing: "المشتريات",
+      finance: "المالية",
+      hr: "الموارد البشرية",
       reports: "التقارير",
     },
     common: {

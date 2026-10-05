@@ -11,38 +11,47 @@ const EXPECTED: Record<Role, Record<ModuleKey, boolean>> = {
   ADMINISTRATOR: {
     dashboard: true, inventory: true, warehouse: true, production: true, lab: true,
     bom: true, mrp: true, sales: true, purchasing: true, reports: true,
+    finance: true, hr: true, notifications: true,
   },
   PRODUCTION_MANAGER: {
     dashboard: true, inventory: true, warehouse: false, production: true, lab: true,
     bom: true, mrp: true, sales: false, purchasing: false, reports: true,
+    finance: false, hr: false, notifications: true,
   },
   WAREHOUSE_MANAGER: {
     dashboard: true, inventory: true, warehouse: true, production: false, lab: false,
     bom: false, mrp: false, sales: false, purchasing: false, reports: false,
+    finance: false, hr: false, notifications: true,
   },
   PURCHASING_OFFICER: {
     dashboard: true, inventory: false, warehouse: false, production: false, lab: false,
     bom: false, mrp: true, sales: false, purchasing: true, reports: false,
+    finance: false, hr: false, notifications: true,
   },
   SALES_STAFF: {
     dashboard: true, inventory: false, warehouse: false, production: false, lab: false,
     bom: false, mrp: false, sales: true, purchasing: false, reports: true,
+    finance: false, hr: false, notifications: true,
   },
   FINANCE: {
     dashboard: true, inventory: false, warehouse: false, production: false, lab: false,
     bom: false, mrp: false, sales: false, purchasing: false, reports: true,
+    finance: true, hr: false, notifications: true,
   },
   HR: {
     dashboard: true, inventory: false, warehouse: false, production: false, lab: false,
     bom: false, mrp: false, sales: false, purchasing: false, reports: false,
+    finance: false, hr: true, notifications: true,
   },
   QA: {
     dashboard: true, inventory: false, warehouse: false, production: true, lab: true,
     bom: false, mrp: false, sales: false, purchasing: false, reports: false,
+    finance: false, hr: false, notifications: true,
   },
   EMPLOYEE: {
     dashboard: true, inventory: false, warehouse: false, production: false, lab: false,
     bom: false, mrp: false, sales: false, purchasing: false, reports: false,
+    finance: false, hr: false, notifications: true,
   },
 };
 
@@ -57,7 +66,7 @@ describe("rbac matrix shape", () => {
   it("exposes a predictable set of modules", () => {
     expect(ALL_MODULES).toEqual([
       "dashboard", "inventory", "warehouse", "production", "lab",
-      "bom", "mrp", "sales", "purchasing", "reports",
+      "bom", "mrp", "sales", "purchasing", "reports", "finance", "hr", "notifications",
     ]);
   });
 
@@ -99,6 +108,23 @@ describe("canAccess", () => {
     for (const role of ALL_ROLES) {
       expect(canAccess(role, "dashboard")).toBe(true);
     }
+  });
+
+  it("grants every role notification access, like dashboard", () => {
+    // The bell is how a role learns that stock ran out. A role that cannot read
+    // its own notifications just misses the news.
+    for (const role of ALL_ROLES) {
+      expect(canAccess(role, "notifications")).toBe(true);
+    }
+  });
+
+  it("keeps finance and hr to their own roles", () => {
+    expect(ALL_ROLES.filter((role) => canAccess(role, "finance"))).toEqual([
+      Role.ADMINISTRATOR, Role.FINANCE,
+    ]);
+    expect(ALL_ROLES.filter((role) => canAccess(role, "hr"))).toEqual([
+      Role.ADMINISTRATOR, Role.HR,
+    ]);
   });
 
   it("locks stock-writing modules down to warehouse and production", () => {

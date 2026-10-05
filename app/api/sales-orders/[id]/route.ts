@@ -5,6 +5,7 @@ import { conflict, notFound } from "@/lib/api-error";
 import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 import { applyMovements, defaultWarehouseId } from "@/lib/inventory/stock-service";
 import { planSalesFulfilment } from "@/lib/inventory/sales-fulfilment";
+import { withReorderAlerts } from "@/lib/notifications/notify";
 
 const statusSchema = z.object({ status: z.enum(["DRAFT", "CONFIRMED", "FULFILLED", "CANCELLED"]) });
 
@@ -47,7 +48,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         );
 
         // Short stock aborts the whole fulfilment rather than shipping part an order.
-        await applyMovements(tx, plan.movements);
+        // withReorderAlerts snapshots on-hand either side of the movements so a
+        // shipment that pushes a line below its reorder point raises a notification.
+        await withReorderAlerts(
+          tx,
+          plan.movements.map((m) => m.itemId),
+          { refType: "SALES_ORDER", refId: current.id },
+          () => applyMovements(tx, plan.movements),
+        );
 
         // Freeze what each unit cost at the moment it left the warehouse, so editing
         // an item's cost later cannot rewrite this order's reported margin.

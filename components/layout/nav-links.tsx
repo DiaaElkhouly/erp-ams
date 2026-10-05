@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Package, Warehouse, Factory, ListTree, CalendarClock,
-  ShoppingCart, Truck, BarChart3, FlaskConical,
+  ShoppingCart, Truck, BarChart3, FlaskConical, Receipt, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "./nav-items";
@@ -13,7 +13,8 @@ import { useI18n } from "@/lib/i18n";
 import type { Role } from "@prisma/client";
 
 const ICONS: Record<string, React.ElementType> = {
-  LayoutDashboard, Package, Warehouse, Factory, ListTree, CalendarClock, ShoppingCart, Truck, BarChart3, FlaskConical,
+  LayoutDashboard, Package, Warehouse, Factory, ListTree, CalendarClock, ShoppingCart, Truck,
+  BarChart3, FlaskConical, Receipt, Users,
 };
 
 export function NavLinks({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {

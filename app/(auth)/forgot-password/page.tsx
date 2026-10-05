@@ -22,7 +22,9 @@ export default function ForgotPasswordPage() {
     setLoading(false);
     if (res.success) {
       toast.success(res.message);
-      if ((res as any).devResetUrl) setDevUrl((res as any).devResetUrl);
+      // Only present in development. Everywhere else the link went to the inbox,
+      // and there is deliberately nothing to show here.
+      if (res.devResetUrl) setDevUrl(res.devResetUrl);
     } else {
       toast.error(res.message);
     }
@@ -48,7 +50,7 @@ export default function ForgotPasswordPage() {
 
         {devUrl && (
           <div className="rounded-md border border-dashed p-3 text-xs">
-            <p className="mb-1 font-medium">رابط وضع التطوير (لم يتم إعداد خادم بريد إلكتروني):</p>
+            <p className="mb-1 font-medium">رابط وضع التطوير (لم يتم إعداد RESEND_API_KEY):</p>
             <Link href={devUrl} className="break-all text-primary hover:underline">{devUrl}</Link>
           </div>
         )}

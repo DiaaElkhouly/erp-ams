@@ -16,6 +16,14 @@ export const MODULE_PERMISSIONS = {
   sales: [Role.ADMINISTRATOR, Role.SALES_STAFF],
   purchasing: [Role.ADMINISTRATOR, Role.PURCHASING_OFFICER],
   reports: [Role.ADMINISTRATOR, Role.FINANCE, Role.PRODUCTION_MANAGER, Role.SALES_STAFF],
+  finance: [Role.ADMINISTRATOR, Role.FINANCE],
+  hr: [Role.ADMINISTRATOR, Role.HR],
+  // Every role, like dashboard. The bell is not a privilege - a role that cannot
+  // read its own notifications is a role that cannot find out stock ran out.
+  notifications: [
+    Role.ADMINISTRATOR, Role.PRODUCTION_MANAGER, Role.WAREHOUSE_MANAGER,
+    Role.PURCHASING_OFFICER, Role.SALES_STAFF, Role.FINANCE, Role.HR, Role.QA, Role.EMPLOYEE,
+  ],
 } as const;
 
 export type ModuleKey = keyof typeof MODULE_PERMISSIONS;

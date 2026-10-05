@@ -73,6 +73,18 @@ async function main() {
       update: {},
       create: { name: "م. أحمد حسن - مدير الجودة", email: "quality@ims.local", passwordHash: password, role: Role.QA },
     }),
+    // Phase 3 roles. Without a user for each of them the new Finance and HR
+    // modules have no way in except as admin, and role gating cannot be tried.
+    db.user.upsert({
+      where: { email: "finance@ims.local" },
+      update: {},
+      create: { name: "Nora Villanueva", email: "finance@ims.local", passwordHash: password, role: Role.FINANCE },
+    }),
+    db.user.upsert({
+      where: { email: "hr@ims.local" },
+      update: {},
+      create: { name: "Sam Oduya", email: "hr@ims.local", passwordHash: password, role: Role.HR },
+    }),
   ]);
   const admin = users[0];
 
@@ -327,8 +339,35 @@ async function main() {
     ),
   });
 
+  // Preferred suppliers are what let an MRP run turn into draft purchase orders.
+  // Without this the planner skips every line as `no-supplier`, so the button
+  // would appear to do nothing on a fresh database.
+  const supplierByName = new Map(
+    (await db.supplier.findMany({ select: { id: true, name: true } })).map((s) => [s.name, s.id]),
+  );
+  // Cement and sand are bought by volume from the merchant that carries them;
+  // the additives from the chemical house. Grouping by supplier is the point -
+  // it is what makes one MRP run produce several purchase orders.
+  const preferredSuppliers: [string, string][] = [
+    ["RM-CEM-425", "شركة السويس للأسمنت والتجارة"],
+    ["RM-SAND-01", "شركة السويس للأسمنت والتجارة"],
+    ["RM-AGG-01", "مورد الحصى والمكعبات"],
+    ["RM-AGG-HALF", "مورد الحصى والمكعبات"],
+    ["RM-STONE-DUST", "شركة النيل لمواد البناء"],
+    ["RM-OXIDE-RED", "شركة النيل لمواد البناء"],
+    ["RM-ADMIX-01", "مصنع الأمل للمواد الكيميائية"],
+    ["RM-1001", "Visayas Steel Supply Co."],
+    ["RM-1002", "Visayas Steel Supply Co."],
+    ["CP-2001", "Visayas Steel Supply Co."],
+  ];
+  for (const [sku, supplierName] of preferredSuppliers) {
+    const supplierId = supplierByName.get(supplierName);
+    if (!supplierId) continue;
+    await db.item.updateMany({ where: { sku }, data: { preferredSupplierId: supplierId } });
+  }
+
   console.log("Seed complete.");
-  console.log("Demo password: Admin123! (admin@ims.local, production@ims.local, warehouse@ims.local, purchasing@ims.local, sales@ims.local, quality@ims.local)");
+  console.log("Demo password: Admin123! (admin@ims.local, production@ims.local, warehouse@ims.local, purchasing@ims.local, sales@ims.local, finance@ims.local, hr@ims.local, quality@ims.local)");
   console.log("Factory demo: block, cement brick, interlock, ready-mix concrete, lab test results, mix designs, and work orders.");
   console.log("History demo: ~14 months of sales orders, purchase orders, work orders and lab tests for the dashboard date filter.");
 }

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { PlayCircle, CalendarClock } from "lucide-react";
+import { PlayCircle, CalendarClock, ShoppingCart, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -30,7 +30,34 @@ export default function MrpPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const { mutate: generate, isPending: generating } = useMutation({
+    mutationFn: () => fetch(`/api/mrp/${latestId}/purchase-orders`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+    }).then(async (r) => {
+      const payload = await r.json();
+      if (!r.ok) throw new Error(payload.error ?? "Failed");
+      return payload;
+    }),
+    onSuccess: (payload) => {
+      qc.invalidateQueries({ queryKey: ["mrp-runs"] });
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      // Skipped lines are the actionable part: nobody can order an item that has
+      // no supplier, so say which ones and why instead of reporting a clean run.
+      if (payload.skipped?.length) {
+        toast.warning(`Created ${payload.purchaseOrders.length} purchase order(s); skipped ${payload.skipped.length} line(s).`, {
+          description: payload.skipped.map((s: any) => `${s.itemId}: ${s.reason}`).join(" · "),
+        });
+      } else {
+        toast.success(`Created ${payload.purchaseOrders.length} draft purchase order(s)`);
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const latest = data?.runs?.[0];
+  const latestId = latest?.id;
+  /** A line already turned into a PO is marked in the table and not re-offered. */
+  const ungenerated = (latest?.lines ?? []).filter((line: any) => !line.purchaseOrderId);
 
   return (
     <div className="space-y-6">
@@ -60,6 +87,17 @@ export default function MrpPage() {
             <CardDescription>{t.localeName === "العربية" ? "تاريخ التشغيل" : "Run at"} {formatDate(latest.runAt)} &middot; {latest.lines.length} {t.localeName === "العربية" ? "مقترحات إعادة طلب" : "suggested replenishments"}</CardDescription>
           </CardHeader>
           <CardContent>
+            {latest.lines.length > 0 && ungenerated.length > 0 && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/50 p-3">
+                <p className="text-sm text-muted-foreground">
+                  {ungenerated.length} suggestion(s) can be turned into draft purchase orders, grouped by supplier.
+                </p>
+                <Button size="sm" variant="outline" onClick={() => generate()} disabled={generating}>
+                  <ShoppingCart className="h-4 w-4" /> {generating ? "Generating..." : "Generate draft POs"}
+                </Button>
+              </div>
+            )}
+
             {latest.lines.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">{t.localeName === "العربية" ? "جميع الأصناف أعلى من نقطة إعادة الطلب. لا توجد كميات مطلوبة." : "All items are above their reorder point. Nothing to replenish."}</p>
             ) : (
@@ -75,10 +113,26 @@ export default function MrpPage() {
                 <TableBody>
                   {latest.lines.map((line: any) => (
                     <TableRow key={line.id}>
-                      <TableCell className="font-medium">{line.item.name} <span className="text-xs text-muted-foreground">({line.item.sku})</span></TableCell>
+                      <TableCell className="font-medium">
+                        {line.item.name} <span className="text-xs text-muted-foreground">({line.item.sku})</span>
+                        {/* No supplier means the PO generator will skip this line. */}
+                        <span className="block text-xs text-muted-foreground">
+                          {line.supplier?.name ?? "no preferred supplier"}
+                        </span>
+                      </TableCell>
                       <TableCell>{line.onHandQty}</TableCell>
                       <TableCell>{line.demandQty}</TableCell>
-                      <TableCell><Badge variant="warning">{line.suggestedQty}</Badge></TableCell>
+                      <TableCell>
+                        {line.purchaseOrderId ? (
+                          /* Already ordered: showing the raw quantity again would
+                             invite someone to generate it a second time. */
+                          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Check className="h-3.5 w-3.5 text-green-600" /> {line.suggestedQty} ordered
+                          </span>
+                        ) : (
+                          <Badge variant="warning">{line.suggestedQty}</Badge>
+                        )}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

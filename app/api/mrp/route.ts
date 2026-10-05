@@ -6,8 +6,10 @@ import { requireModuleAccess, handleApiError } from "@/lib/api-helpers";
 export async function GET() {
   const { error } = await requireModuleAccess("mrp");
   if (error) return error;
+  // `supplier` is included so the page can show who each suggestion would be bought
+  // from - that is the thing a buyer needs to sanity-check before ordering.
   const runs = await db.mrpRun.findMany({
-    include: { lines: { include: { item: true } } },
+    include: { lines: { include: { item: true, supplier: true } } },
     orderBy: { runAt: "desc" },
     take: 10,
   });
@@ -43,7 +45,15 @@ export async function POST(req: NextRequest) {
         const demand = demandMap.get(item.id) ?? 0;
         const projected = onHand - demand;
         const suggested = projected < item.reorderPoint ? Math.max(item.reorderQty, item.reorderPoint - projected) : 0;
-        return { itemId: item.id, onHandQty: onHand, demandQty: demand, suggestedQty: suggested };
+        return {
+          itemId: item.id,
+          onHandQty: onHand,
+          demandQty: demand,
+          suggestedQty: suggested,
+          // Frozen onto the line: changing an item's preferred supplier later must
+          // not rewrite which supplier a past run proposed to buy from.
+          supplierId: item.preferredSupplierId,
+        };
       })
       .filter((l) => l.suggestedQty > 0);
 

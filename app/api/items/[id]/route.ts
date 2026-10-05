@@ -10,6 +10,8 @@ const updateSchema = z.object({
   salePrice: z.coerce.number().nonnegative().optional(),
   reorderPoint: z.coerce.number().int().nonnegative().optional(),
   reorderQty: z.coerce.number().int().nonnegative().optional(),
+  /** Nullable so an item can be taken off every supplier's catalogue. */
+  preferredSupplierId: z.string().min(1).nullable().optional(),
   isActive: z.boolean().optional(),
 });
 

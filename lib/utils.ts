@@ -84,6 +84,12 @@ export function formatDateTime(date: Date | string) {
   }).format(d);
 }
 
+/** Clock time only, for a punch card where the date is already the row's subject. */
+export function formatTime(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit" }).format(d);
+}
+
 export function generateOrderNumber(prefix: string) {
   const stamp = Date.now().toString(36).toUpperCase();
   const rand = Math.random().toString(36).slice(2, 5).toUpperCase();
