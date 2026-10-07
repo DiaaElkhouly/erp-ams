@@ -22,6 +22,7 @@ import { useItemsForPickers } from "@/features/bom/hooks/use-boms";
 import { AttachmentLink, uploadFile } from "@/components/shared/file-upload";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { PageHeader } from "@/components/shared/page-header";
 
 const STATUS_VARIANT: Record<string, "secondary" | "default" | "success" | "destructive"> = {
   DRAFT: "secondary", ORDERED: "default", RECEIVED: "success", CANCELLED: "destructive",
@@ -308,10 +309,7 @@ export default function PurchasingPage() {
   const { t } = useI18n();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{t.nav.purchasing}</h1>
-        <p className="text-sm text-muted-foreground">{t.pages.purchasingDescription}</p>
-      </div>
+      <PageHeader title={t.nav.purchasing} description={t.pages.purchasingDescription} />
       <Tabs defaultValue="orders">
         <TabsList>
           <TabsTrigger value="orders">{t.nav.orders}</TabsTrigger>

@@ -44,6 +44,8 @@ export type ItemListParams = {
   q?: string;
   type?: Item["type"];
   isActive?: boolean;
+  /** Server-side filter for items at or below their reorder point. */
+  lowStock?: boolean;
   page?: number;
   pageSize?: number;
   sortBy?: ItemSortField;
@@ -65,13 +67,14 @@ async function handle(res: Response) {
   return res.json();
 }
 
-function listUrl({ q = "", type, isActive, page = 1, pageSize = 20, sortBy, sortDir }: ItemListParams) {
+function listUrl({ q = "", type, isActive, lowStock, page = 1, pageSize = 20, sortBy, sortDir }: ItemListParams) {
   const params = new URLSearchParams();
   if (q) params.set("q", q);
   if (type) params.set("type", type);
   // Only sent when set: the route treats an absent value as "no filter", and
   // sending isActive=false would silently empty the picker lists.
   if (isActive !== undefined) params.set("isActive", String(isActive));
+  if (lowStock) params.set("lowStock", "true");
   params.set("page", String(page));
   params.set("pageSize", String(pageSize));
   if (sortBy) params.set("sortBy", sortBy);

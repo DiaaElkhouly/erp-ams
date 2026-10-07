@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger,
 } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
+import { PageHeader } from "@/components/shared/page-header";
 
 interface Warehouse {
   id: string;
@@ -91,13 +92,11 @@ export default function WarehousePage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">{t.nav.warehouse}</h1>
-          <p className="text-sm text-muted-foreground">{t.pages.warehouseDescription}</p>
-        </div>
-        <NewWarehouseDialog />
-      </div>
+      <PageHeader
+        title={t.nav.warehouse}
+        description={t.pages.warehouseDescription}
+        actions={<NewWarehouseDialog />}
+      />
 
       {isLoading && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

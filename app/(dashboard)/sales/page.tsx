@@ -21,6 +21,7 @@ import { usePartiesList } from "@/features/parties/hooks/use-parties";
 import { useItemsForPickers } from "@/features/bom/hooks/use-boms";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
+import { PageHeader } from "@/components/shared/page-header";
 
 const STATUS_VARIANT: Record<string, "secondary" | "default" | "success" | "destructive"> = {
   DRAFT: "secondary", CONFIRMED: "default", FULFILLED: "success", CANCELLED: "destructive",
@@ -251,10 +252,7 @@ export default function SalesPage() {
   const { t } = useI18n();
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">{t.nav.sales}</h1>
-        <p className="text-sm text-muted-foreground">{t.pages.salesDescription}</p>
-      </div>
+      <PageHeader title={t.nav.sales} description={t.pages.salesDescription} />
       <Tabs defaultValue="orders">
         <TabsList>
           <TabsTrigger value="orders">{t.nav.orders}</TabsTrigger>

@@ -12,6 +12,10 @@ declare module "@tanstack/react-table" {
   interface ColumnMeta<TData extends RowData, TValue> {
     /** Passed through to SortableHead so numeric columns can right-align. */
     align?: "start" | "end" | "center";
+    /** Right-aligns and uses tabular figures so digit columns line up. */
+    numeric?: boolean;
+    /** Hides the column below this Tailwind breakpoint (e.g. "md"). */
+    hideBelow?: "sm" | "md" | "lg" | "xl";
   }
 }
 

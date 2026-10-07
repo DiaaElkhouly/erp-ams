@@ -1,6 +1,7 @@
 "use client";
 
 import { ItemTable } from "@/features/inventory/components/item-table";
+import { PageHeader } from "@/components/shared/page-header";
 import { useI18n } from "@/lib/i18n";
 import Link from "next/link";
 import { FlaskConical } from "lucide-react";
@@ -10,13 +11,18 @@ export default function InventoryPage() {
   const { t } = useI18n();
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-        <h1 className="text-xl font-semibold tracking-tight">{t.nav.inventory}</h1>
-        <p className="text-sm text-muted-foreground">{t.pages.inventoryDescription}</p>
-        </div>
-        <Link href="/lab"><Button size="sm" variant="outline"><FlaskConical className="h-4 w-4" />{t.pages.materialTests}</Button></Link>
-      </div>
+      <PageHeader
+        title={t.nav.inventory}
+        description={t.pages.inventoryDescription}
+        actions={
+          <Link href="/lab">
+            <Button size="sm" variant="outline">
+              <FlaskConical className="h-4 w-4" />
+              {t.pages.materialTests}
+            </Button>
+          </Link>
+        }
+      />
       <ItemTable />
     </div>
   );

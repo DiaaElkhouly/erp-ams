@@ -163,8 +163,6 @@ export default async function DashboardPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5 text-xs text-muted-foreground">
-          <Badge variant="outline">{t.dashboard.currency}: {DEFAULT_CURRENCY}</Badge>
-          <Badge variant="outline">{t.dashboard.previousAvailable}</Badge>
         </div>
       </div>
 

@@ -2,8 +2,24 @@
 import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 
-const Tabs = TabsPrimitive.Root;
+/*
+ * Radix Tabs defaults `dir` to "ltr" and writes it onto its own root element,
+ * which overrides the document's direction. In an Arabic (RTL) page that left
+ * the tab strip laid out left-to-right — the same as English — so the active
+ * tab and the reading order were mirrored from the rest of the page. Reading
+ * the locale from context and forwarding it as `dir` keeps the strip in step
+ * with the page for every caller without each one remembering to pass it.
+ */
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ dir, ...props }, ref) => {
+  const { direction } = useI18n();
+  return <TabsPrimitive.Root ref={ref} dir={dir ?? direction} {...props} />;
+});
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,

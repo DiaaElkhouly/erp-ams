@@ -36,17 +36,21 @@ const itemInclude = { stockLevels: { include: { warehouse: true } }, preferredSu
  */
 async function orderIdsByOnHand(
   where: Prisma.ItemWhereInput,
-  direction: SortDirection
+  direction: SortDirection,
+  lowStockOnly = false
 ): Promise<{ ids: string[]; total: number }> {
   const [items, grouped] = await Promise.all([
-    db.item.findMany({ where, select: { id: true } }),
+    db.item.findMany({ where, select: { id: true, reorderPoint: true } }),
     // Scoped to the same filter, or this aggregates the whole stock table.
     db.stockLevel.groupBy({ by: ["itemId"], where: { item: where }, _sum: { quantity: true } }),
   ]);
 
   const onHandByItem = new Map(grouped.map((row) => [row.itemId, row._sum.quantity ?? 0]));
   const multiplier = direction === "asc" ? 1 : -1;
-  const ordered = items
+  const eligible = lowStockOnly
+    ? items.filter((item) => (onHandByItem.get(item.id) ?? 0) <= item.reorderPoint)
+    : items;
+  const ordered = eligible
     .map((item) => item.id)
     .sort((a, b) => {
       const difference = (onHandByItem.get(a) ?? 0) - (onHandByItem.get(b) ?? 0);
@@ -68,6 +72,7 @@ export async function GET(req: NextRequest) {
   // Only filters when asked. Defaulting to active-only would silently hide rows
   // from the BOM and order pickers, which ask for every item regardless of state.
   const active = searchParams.get("isActive");
+  const lowStock = searchParams.get("lowStock") === "true";
   const { page, pageSize, skip, take } = parsePaging(searchParams);
   const { sortBy, sortDir } = parseSort<SortableColumn>(searchParams, SORTABLE, {
     defaultSortBy: "createdAt",
@@ -83,8 +88,8 @@ export async function GET(req: NextRequest) {
   };
 
   try {
-    if (sortBy === "onHand") {
-      const { ids, total } = await orderIdsByOnHand(where, sortDir);
+    if (sortBy === "onHand" || lowStock) {
+      const { ids, total } = await orderIdsByOnHand(where, sortDir, lowStock);
       const pageIds = ids.slice(skip, skip + take);
       const items = await db.item.findMany({
         where: { id: { in: pageIds } },

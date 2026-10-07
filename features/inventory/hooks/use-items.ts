@@ -14,9 +14,9 @@ export const ITEMS_PAGE_SIZE = 20;
  * round trip.
  */
 export function useItems(params: ItemListParams = {}) {
-  const { q = "", page = 1, pageSize = ITEMS_PAGE_SIZE, sortBy, sortDir } = params;
+  const { q = "", type, isActive, lowStock, page = 1, pageSize = ITEMS_PAGE_SIZE, sortBy, sortDir } = params;
   return useQuery({
-    queryKey: ["items", "list", { q, page, pageSize, sortBy, sortDir }],
+    queryKey: ["items", "list", { q, type, isActive, lowStock, page, pageSize, sortBy, sortDir }],
     queryFn: () => itemService.list(params),
     // Keeps the previous page on screen while the next one loads, so the table
     // does not collapse to five skeleton rows on every page turn.

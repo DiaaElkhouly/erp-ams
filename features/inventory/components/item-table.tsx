@@ -9,13 +9,15 @@ import {
   type PaginationState,
   type SortingState,
 } from "@tanstack/react-table";
-import { Search, Trash2, PackageX, Pencil } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Trash2, PackageX, Pencil, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NativeSelect } from "@/components/ui/select-native";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { SortableHead, TablePagination } from "@/components/shared/data-table";
+import { Toolbar, ToolbarSearch } from "@/components/shared/toolbar";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { ITEMS_PAGE_SIZE, useDeleteItem, useItems } from "../hooks/use-items";
 import { useDebouncedValue } from "../hooks/use-debounced-value";
 import type { Item, ItemSortField } from "../services/item-service";
@@ -31,12 +33,17 @@ const TYPE_VARIANT: Record<string, "default" | "secondary" | "success" | "warnin
   CONSUMABLE: "warning",
 };
 
+const ITEM_TYPES = ["RAW_MATERIAL", "COMPONENT", "FINISHED_GOOD", "CONSUMABLE"] as const;
+
 const onHandOf = (item: Item) => item.stockLevels.reduce((sum, level) => sum + level.quantity, 0);
 
 export function ItemTable() {
   const { t } = useI18n();
   const [search, setSearch] = useState("");
   const query = useDebouncedValue(search);
+  const [typeFilter, setTypeFilter] = useState<"" | Item["type"]>("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">("");
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: "createdAt", desc: true }]);
   const [pagination, setPagination] = useState<PaginationState>({ pageIndex: 0, pageSize: ITEMS_PAGE_SIZE });
   const [editing, setEditing] = useState<Item | null>(null);
@@ -44,8 +51,11 @@ export function ItemTable() {
   const sortBy = sorting[0]?.id as ItemSortField | undefined;
   const sortDir = sorting[0]?.desc ? "desc" : "asc";
 
-  const { data, isLoading, isFetching } = useItems({
+  const { data, isLoading, isFetching, isError, error, refetch } = useItems({
     q: query,
+    type: typeFilter || undefined,
+    isActive: statusFilter === "" ? undefined : statusFilter === "active",
+    lowStock: lowStockOnly || undefined,
     page: pagination.pageIndex + 1,
     pageSize: pagination.pageSize,
     sortBy,
@@ -57,6 +67,29 @@ export function ItemTable() {
   const total = data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize));
 
+  const hasFilters = typeFilter !== "" || statusFilter !== "" || lowStockOnly || search !== "";
+  const activeFilterCount = [typeFilter !== "", statusFilter !== "", lowStockOnly, search !== ""].filter(Boolean).length;
+
+  // Any filter change invalidates the current slice: page 4 of the old filter is
+  // an arbitrary page of the new one. Reset to the first page in one place.
+  function resetToFirstPage() {
+    setPagination((current) => ({ ...current, pageIndex: 0 }));
+  }
+
+  function clearFilters() {
+    setSearch("");
+    setTypeFilter("");
+    setStatusFilter("");
+    setLowStockOnly(false);
+    resetToFirstPage();
+  }
+
+  const typeLabel = (type: Item["type"]) =>
+    type === "RAW_MATERIAL" ? t.common.rawMaterial
+    : type === "FINISHED_GOOD" ? t.common.finishedGood
+    : type === "COMPONENT" ? t.common.component
+    : t.common.consumable;
+
   // onHand is derived client-side for display but ordered by the server, which
   // sums StockLevel rows across warehouses. Both must agree or the arrows lie.
   const columns = useMemo<ColumnDef<Item>[]>(() => [
@@ -65,29 +98,40 @@ export function ItemTable() {
       header: t.common.sku,
       cell: ({ row }) => <span className="font-mono text-xs">{row.original.sku}</span>,
     },
-    { accessorKey: "name", header: t.common.name, cell: ({ row }) => <span className="font-medium">{row.original.name}</span> },
+    { accessorKey: "name", header: t.common.name, cell: ({ row }) => (
+      <div className="flex flex-col gap-0.5">
+        <span className="font-medium">{row.original.name}</span>
+        {/* The type badge is the only other cell that fits under the name on a
+            phone, so it is repeated here and hidden once the column returns. */}
+        <span className="sm:hidden">
+          <Badge variant={TYPE_VARIANT[row.original.type]}>{typeLabel(row.original.type)}</Badge>
+        </span>
+      </div>
+    ) },
     {
       accessorKey: "type",
       header: t.common.type,
-      cell: ({ row }) => {
-        const type = row.original.type;
-        const label =
-          type === "RAW_MATERIAL" ? t.common.rawMaterial
-          : type === "FINISHED_GOOD" ? t.common.finishedGood
-          : type === "COMPONENT" ? t.common.component
-          : t.common.consumable;
-        return <Badge variant={TYPE_VARIANT[type]}>{label}</Badge>;
-      },
+      meta: { align: "start", hideBelow: "sm" },
+      cell: ({ row }) => <Badge variant={TYPE_VARIANT[row.original.type]}>{typeLabel(row.original.type)}</Badge>,
     },
     {
       id: "onHand",
       accessorFn: onHandOf,
       header: t.common.onHand,
+      meta: { align: "end", numeric: true },
       cell: ({ row }) => {
         const onHand = onHandOf(row.original);
         const low = onHand <= row.original.reorderPoint;
         return (
-          <span className={low ? "font-semibold text-destructive" : ""}>
+          <span
+            className={
+              low
+                ? "inline-flex items-center gap-1 font-semibold tabular-nums text-destructive"
+                : "tabular-nums"
+            }
+            title={low ? t.common.lowStock : undefined}
+          >
+            {low && <AlertTriangle className="h-3.5 w-3.5" aria-hidden />}
             {onHand} {row.original.unit}
           </span>
         );
@@ -96,23 +140,24 @@ export function ItemTable() {
     {
       accessorKey: "reorderPoint",
       header: t.common.reorderPt,
-      cell: ({ row }) => <span className="text-muted-foreground">{row.original.reorderPoint}</span>,
+      meta: { align: "end", hideBelow: "md", numeric: true },
+      cell: ({ row }) => <span className="tabular-nums text-muted-foreground">{row.original.reorderPoint}</span>,
     },
     {
       accessorKey: "costPrice",
       header: t.common.cost,
-      meta: { align: "end" },
-      cell: ({ row }) => formatCurrency(row.original.costPrice),
+      meta: { align: "end", hideBelow: "lg", numeric: true },
+      cell: ({ row }) => <span className="tabular-nums">{formatCurrency(row.original.costPrice)}</span>,
     },
     {
       accessorKey: "salePrice",
       header: t.common.price,
-      meta: { align: "end" },
-      cell: ({ row }) => formatCurrency(row.original.salePrice),
+      meta: { align: "end", hideBelow: "lg", numeric: true },
+      cell: ({ row }) => <span className="tabular-nums">{formatCurrency(row.original.salePrice)}</span>,
     },
     {
       id: "actions",
-      header: t.common.actions,
+      header: () => <span className="sr-only">{t.common.actions}</span>,
       enableSorting: false,
       meta: { align: "end" },
       cell: ({ row }) => (
@@ -120,9 +165,17 @@ export function ItemTable() {
           <Button variant="ghost" size="icon" onClick={() => setEditing(row.original)} aria-label={t.common.edit}>
             <Pencil className="h-4 w-4 text-muted-foreground" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => deleteItem(row.original.id)} aria-label={t.common.delete}>
-            <Trash2 className="h-4 w-4 text-muted-foreground" />
-          </Button>
+          <ConfirmDialog
+            title={t.common.confirmDeleteTitle.replace("{entity}", row.original.name)}
+            description={t.common.confirmDeleteBody}
+            confirmLabel={t.common.confirmDeleteConfirm}
+            cancelLabel={t.common.confirmDeleteCancel}
+            onConfirm={() => deleteItem(row.original.id)}
+          >
+            <Button variant="ghost" size="icon" aria-label={t.common.delete}>
+              <Trash2 className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </ConfirmDialog>
         </div>
       ),
     },
@@ -147,24 +200,74 @@ export function ItemTable() {
     onPaginationChange: setPagination,
   });
 
+  const colSpan = table.getVisibleLeafColumns().length;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative w-full max-w-xs">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t.common.search}
-            aria-label={t.common.search}
-            className="pl-8"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPagination((current) => ({ ...current, pageIndex: 0 }));
-            }}
-          />
-        </div>
-        <ItemFormDialog />
-      </div>
+      <Toolbar
+        actions={
+          <>
+            {hasFilters ? (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                {t.common.clearFilters}
+              </Button>
+            ) : null}
+            <ItemFormDialog />
+          </>
+        }
+      >
+        <ToolbarSearch
+          value={search}
+          onChange={(value) => {
+            setSearch(value);
+            resetToFirstPage();
+          }}
+          placeholder={t.common.search}
+        />
+
+        <NativeSelect
+          aria-label={t.common.type}
+          className="w-full sm:w-40"
+          value={typeFilter}
+          onChange={(event) => {
+            setTypeFilter(event.target.value as Item["type"] | "");
+            resetToFirstPage();
+          }}
+        >
+          <option value="">{t.common.allTypes}</option>
+          {ITEM_TYPES.map((type) => (
+            <option key={type} value={type}>{typeLabel(type)}</option>
+          ))}
+        </NativeSelect>
+
+        <NativeSelect
+          aria-label={t.common.status}
+          className="w-full sm:w-36"
+          value={statusFilter}
+          onChange={(event) => {
+            setStatusFilter(event.target.value as "" | "active" | "inactive");
+            resetToFirstPage();
+          }}
+        >
+          <option value="">{t.common.allStatus}</option>
+          <option value="active">{t.common.activeOnly}</option>
+          <option value="inactive">{t.common.inactiveOnly}</option>
+        </NativeSelect>
+
+        <Button
+          type="button"
+          variant={lowStockOnly ? "secondary" : "outline"}
+          size="sm"
+          aria-pressed={lowStockOnly}
+          onClick={() => {
+            setLowStockOnly((current) => !current);
+            resetToFirstPage();
+          }}
+        >
+          <AlertTriangle className="h-4 w-4" />
+          {t.common.lowStockOnly}
+        </Button>
+      </Toolbar>
 
       <div className="rounded-lg border">
         <Table>
@@ -173,12 +276,19 @@ export function ItemTable() {
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   const canSort = header.column.getCanSort();
+                  const hideBelow = header.column.columnDef.meta?.hideBelow;
+                  const hideClass = hideBelow ? `hidden ${hideBelow}:table-cell` : undefined;
                   return canSort ? (
-                    <SortableHead key={header.id} column={header.column} align={header.column.columnDef.meta?.align}>
+                    <SortableHead
+                      key={header.id}
+                      column={header.column}
+                      align={header.column.columnDef.meta?.align}
+                      className={hideClass}
+                    >
                       {flexRender(header.column.columnDef.header, header.getContext())}
                     </SortableHead>
                   ) : (
-                    <TableHead key={header.id} className="text-right">
+                    <TableHead key={header.id} className={hideClass ? `${hideClass} text-end` : "text-end"}>
                       {flexRender(header.column.columnDef.header, header.getContext())}
                     </TableHead>
                   );
@@ -190,29 +300,65 @@ export function ItemTable() {
             {isLoading && Array.from({ length: 5 }).map((_, i) => (
               <TableRow key={i}>
                 {table.getVisibleLeafColumns().map((column) => (
-                  <TableCell key={column.id}><Skeleton className="h-4 w-full" /></TableCell>
+                  <TableCell key={column.id} className="py-3"><Skeleton className="h-4 w-full" /></TableCell>
                 ))}
               </TableRow>
             ))}
 
-            {!isLoading && items.length === 0 && (
+            {!isLoading && isError && (
               <TableRow>
-                <TableCell colSpan={columns.length} className="py-10 text-center text-sm text-muted-foreground">
-                  <PackageX className="mx-auto mb-2 h-6 w-6" />
-                  {query ? t.common.noResults : t.common.noItems}
+                <TableCell colSpan={colSpan} className="py-10 text-center text-sm text-muted-foreground">
+                  <AlertTriangle className="mx-auto mb-2 h-6 w-6 text-destructive" />
+                  <p>{error instanceof Error ? error.message : t.common.noData}</p>
+                  <Button variant="outline" size="sm" className="mt-3" onClick={() => refetch()}>
+                    {t.common.resetFilters}
+                  </Button>
                 </TableCell>
               </TableRow>
             )}
 
-            {!isLoading && table.getRowModel().rows.map((row) => (
+            {!isLoading && !isError && items.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={colSpan} className="py-10 text-center text-sm text-muted-foreground">
+                  <PackageX className="mx-auto mb-2 h-6 w-6" />
+                  {hasFilters ? t.common.noResults : t.common.noItems}
+                  {hasFilters ? (
+                    <div className="mt-3">
+                      <Button variant="outline" size="sm" onClick={clearFilters}>{t.common.clearFilters}</Button>
+                    </div>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            )}
+
+            {!isLoading && !isError && table.getRowModel().rows.map((row) => (
               <TableRow key={row.id} className={editing?.id === row.original.id ? "bg-muted/50" : undefined}>
-                {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
-                ))}
+                {row.getVisibleCells().map((cell) => {
+                  const hideBelow = cell.column.columnDef.meta?.hideBelow;
+                  const hideClass = hideBelow ? `hidden ${hideBelow}:table-cell` : undefined;
+                  return (
+                    <TableCell key={cell.id} className={hideClass}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </TableCell>
+                  );
+                })}
               </TableRow>
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Filter feedback doubles as the "stale rows" hint: rows are dimmed, not
+          replaced, while a fetch is in flight, and this says why. */}
+      <div className="flex items-center gap-2">
+        {isFetching && !isLoading && (
+          <span className="text-xs text-muted-foreground" role="status">{t.common.updating}</span>
+        )}
+        {activeFilterCount > 0 && !isFetching && (
+          <span className="text-xs text-muted-foreground">
+            {t.common.resultsCount.replace("{count}", String(total))}
+          </span>
+        )}
       </div>
 
       <TablePagination
@@ -223,11 +369,6 @@ export function ItemTable() {
         onPageChange={(page) => setPagination((current) => ({ ...current, pageIndex: page - 1 }))}
         onPageSizeChange={(pageSize) => setPagination({ pageIndex: 0, pageSize })}
       />
-
-      {/* Dimmed while a page turn is in flight, so stale rows are not mistaken for fresh ones. */}
-      {isFetching && !isLoading && (
-        <p className="text-xs text-muted-foreground" role="status">{t.common.updating}</p>
-      )}
 
       <ItemEditDialog item={editing} onOpenChange={(open) => !open && setEditing(null)} />
     </div>
